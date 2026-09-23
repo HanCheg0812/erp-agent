@@ -169,32 +169,3 @@ export const api = {
 
 export type PersonalMemory = { id: string; text: string; created_at: string };
 export type CaseDocument = { id: string; filename: string; content_type: string; bytes: number; state: 'uploading' | 'ready' | 'failed'; created_at: string };
-
-const now = new Date();
-const iso = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 60 * 60 * 1000).toISOString();
-
-export const demoCases: CaseRecord[] = [
-  { id: 'case-demo-001', title: 'Q4 Northwind delivery revision', customer_code: 'NORTHWIND', part_number: 'PM-42A', revision: 'C', demand_type: 'order', quantity_basis: 'replacement', status: 'awaiting_approval', version: 3, owner_id: 'alex.chen', created_at: iso(38), updated_at: iso(1) },
-  { id: 'case-demo-002', title: 'Atlas order uplift / October', customer_code: 'ATLAS', part_number: 'PX-18', revision: 'B', demand_type: 'order', quantity_basis: 'replacement', status: 'analyzing', version: 1, owner_id: 'mira.li', created_at: iso(16), updated_at: iso(3) },
-  { id: 'case-demo-003', title: 'Redwood ship date correction', customer_code: 'REDWOOD', part_number: 'RM-220', revision: 'A', demand_type: 'delivery_instruction', quantity_basis: 'replacement', status: 'approved', version: 5, owner_id: 'alex.chen', created_at: iso(74), updated_at: iso(9) },
-  { id: 'case-demo-004', title: 'Cedar line item reconciliation', customer_code: 'CEDAR', part_number: 'CL-09', revision: 'D', demand_type: 'order', quantity_basis: 'unknown', status: 'rejected', version: 2, owner_id: 'nora.wu', created_at: iso(120), updated_at: iso(48) },
-];
-
-export const demoDetail: Record<string, CaseDetail> = {
-  'case-demo-001': {
-    ...demoCases[0],
-    proposals: [{ id: 'proposal-demo-001', case_id: 'case-demo-001', case_version: 3, summary: 'Replace the Northwind order total with 1,280 units and pull delivery forward by 6 days.', actions: [{ type: 'revise_sales_order_item', sales_order: 'SO-NW-2026-1042', item_row: '10', expected_erp_modified: '2026-09-18T08:21:00Z', expected_quantity: 960, proposed_quantity: 1280, expected_delivery_date: '2026-10-28', proposed_delivery_date: '2026-10-22' }], evidence: [{ document_id: '00000000-0000-4000-8000-000000000001', revision: 'R3', locator: 'page 2, table 1' }, { document_id: '00000000-0000-4000-8000-000000000002', revision: 'R1', locator: 'email thread, 2026-09-20 14:32' }], digest: 'a92fce21c1f3c0d7c2b4b16ea2fc8014a4b6c1bbd11a8b2f8fa5e0d7b40e11aa', created_at: iso(1) }],
-    approvals: [],
-  },
-  'case-demo-002': { ...demoCases[1], proposals: [], approvals: [] },
-  'case-demo-003': { ...demoCases[2], proposals: [{ id: 'proposal-demo-003', case_id: 'case-demo-003', case_version: 5, summary: 'Move the confirmed delivery date to 2026-10-04.', actions: [{ type: 'revise_sales_order_item', sales_order: 'SO-RW-2026-0931', item_row: '20', expected_erp_modified: '2026-09-15T11:04:00Z', expected_quantity: 420, proposed_quantity: 420, expected_delivery_date: '2026-10-11', proposed_delivery_date: '2026-10-04' }], evidence: [{ document_id: '00000000-0000-4000-8000-000000000003', revision: 'R2', locator: 'page 1, delivery block' }], digest: 'b25d7b3a3b18b0d2e9314cba77eaa46de9cb6ce30e9c64c56be4c9d2c6f2a9f1', created_at: iso(9) }], approvals: [{ id: 'approval-demo-003', proposal_id: 'proposal-demo-003', proposal_digest: 'b25d7b3a3b18b0d2e9314cba77eaa46de9cb6ce30e9c64c56be4c9d2c6f2a9f1', decision: 'approved', comment: 'Matches the customer instruction and available capacity.', actor_id: 'demo-approver', created_at: iso(8) }] },
-  'case-demo-004': { ...demoCases[3], proposals: [], approvals: [] },
-};
-
-export const demoEvents = (caseId: string): AuditEvent[] => {
-  const item = demoDetail[caseId] ?? demoDetail['case-demo-001'];
-  const events: AuditEvent[] = [{ id: '1', event_type: 'case.created', payload: { version: 1 }, actor_id: item.owner_id, created_at: item.created_at }];
-  if (item.proposals[0]) events.push({ id: '2', event_type: 'proposal.created', payload: { version: item.proposals[0].case_version, proposal_id: item.proposals[0].id }, actor_id: item.owner_id, created_at: item.proposals[0].created_at });
-  if (item.approvals[0]) events.push({ id: '3', event_type: `proposal.${item.approvals[0].decision}`, payload: { proposal_id: item.approvals[0].proposal_id }, actor_id: item.approvals[0].actor_id, created_at: item.approvals[0].created_at });
-  return events.reverse();
-};

@@ -1,8 +1,8 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { ArrowRight, Eye, EyeOff, LoaderCircle } from 'lucide-react';
+import { Eye, EyeOff, LoaderCircle } from 'lucide-react';
 import { login } from './api';
 
-export function AuthScreen({ notice, onDemo }: { notice: string; onDemo: () => void }) {
+export function AuthScreen({ notice }: { notice: string }) {
   const [register, setRegister] = useState(false);
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -22,7 +22,7 @@ export function AuthScreen({ notice, onDemo }: { notice: string; onDemo: () => v
   };
 
   return <div className="auth-page">
-    <header className="auth-header"><div className="auth-brand"><span className="brand-mark">F</span><strong>Forge</strong></div><button type="button" className="text-button auth-demo" disabled={busy} onClick={onDemo}>View demo<ArrowRight size={15} /></button></header>
+    <header className="auth-header"><div className="auth-brand"><span className="brand-mark">F</span><strong>Forge</strong></div></header>
     <main className="auth-main"><section className="auth-content" aria-labelledby="auth-title">
       <h1 id="auth-title">{register ? 'Create your account' : 'Sign in to Forge'}</h1>
       <form className="auth-form" onSubmit={submit} aria-busy={busy}>

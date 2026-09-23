@@ -66,7 +66,7 @@ npm run dev:api
 
 API 默认 `http://127.0.0.1:3100`；`/health` 检查进程，`/ready` 检查数据库及迁移。登录信息由 `dev:init` 生成到权限为 0600 的本地 `.env`，不会输出到日志。另开终端执行 `npm run dev:web` 可访问业务 Web：`http://127.0.0.1:4173`。
 
-未登录时首页直接显示邮箱登录/注册；合成演示需主动选择 `View demo`。新账号进入空的个人工作区，可创建首个案件。有效登录刷新后保留；退出或服务端会话失效会返回登录页，并同步同一浏览器的其他标签页。
+未登录时首页只显示邮箱登录/注册。新账号进入空的个人工作区，可创建首个案件。有效登录刷新后保留；退出或服务端会话失效会返回登录页，并同步同一浏览器的其他标签页。
 
 模型运行还需要 Rust 工具链：执行 `npm run agent:build`，在已忽略的 `.runtime/deepseek.env` 中配置专用 `DEEPSEEK_API_KEY`，权限设为 0600。`npm run dev:api` 自动加载此文件；默认地址为 `https://api.deepseek.com`，默认模型为 `deepseek-flash`，可用 `DEEPSEEK_MODEL` 显式选择。配置和运行约束见 [Runtime Bridge](services/runtime-bridge/README.md)。没有模型配置时只保存新输入，不排队补跑历史消息。
 

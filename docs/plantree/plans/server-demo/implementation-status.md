@@ -1,5 +1,7 @@
 # Implementation Status
 
+2026-09-23 Web 入口调整：按当前个人演示范围移除未登录页 `View demo` 及浏览器内合成案件、固定回复、模拟工具调用和模拟审批分支；只保留真实登录/注册与账户会话。前端 `npm run typecheck` 和 `npm run build:web` 通过；在本地 4174 浏览器确认未登录只出现登录表单，切换后显示注册表单。此项不改变后端案件、方案、审批及 ERP/MCP 权限边界；生产部署未做。
+
 2026-09-23 多进程 Agent 分发补充：`agent_runs` 每条消息一行，同一案件维持单活，不同案件由多个独立 Rust worker 同时消费；HTTP 进程可关闭内置 worker。事务提交后的 PostgreSQL `NOTIFY` 唤醒所有 worker，5 秒扫描兜底，迁移注册遗漏已修复并加 SQL 文件覆盖测试。50 个独立用户/案件、2 秒固定 runtime 的一次本地探针中，1/2/4/8 个 worker 各 8 槽的完成 P95 分别为 12.49/6.40/4.32/2.54 秒，50/50 均完成；8 worker 的实际峰值为 50。此为模拟 Runtime 分发测量，不是 DeepSeek 或 Cube 业务容量。Cube 官方预热建议强调真正的 Agent session readiness 和明确的 session 池/每沙箱任务模型；详情及命令见 [Agent 并发探针](agent-runtime-concurrency.md)。
 
 本地 3100 服务现为 1 个无内置 worker 的 API + 8 个独立 worker，每个 8 槽（总 64）。八条 PostgreSQL 监听连接、`/ready` 和切换后的一条真实 DeepSeek Flash 短回复已验证；隔离数据库的 8×8、50 用户固定 2 秒 Runtime 探针完成 50/50，完成 P95 冷轮 2.54 秒、暖轮 2.24 秒。此前本机 4×4、50 用户模拟探针两轮均完成，P95 6.35/6.28 秒，作为对照。完整 `npm run check` 通过。该本地服务为用户级临时 systemd unit，重启机器后需重新启动；真实模型 50 用户和 Cube 常驻路径尚未测。
@@ -38,6 +40,6 @@
 
 API 的登录 `sessions`、Agent 存储 `agent_sessions`、案件输入 `case_conversation_messages` 是不同记录。配置模型后，新消息事务性排入 `agent_runs`，JCode 执行模型/工具循环；无配置时只保存输入，后续配置不会补跑旧消息。审批不执行 ERP 写入。
 
-本地 API：`http://127.0.0.1:3100`，进程重启后 `/ready` 200；Web：`http://127.0.0.1:4173`。未登录首页已改为邮箱登录/注册，合成演示需主动选择 `View demo`。有效登录刷新保留；退出及服务端 401 返回登录页并清空账户界面，跨标签页同步已验证。新账号从空工作区创建首个案件，本地演示凭据在 `.env`。2026-09-22 认证入口回归 10 项通过，证据见 [Rust 验收](rust-auth-context.md)。本轮未提交、推送或部署生产。
+本地 API：`http://127.0.0.1:3100`，Web 开发入口见 README。未登录首页只提供邮箱登录/注册；`View demo` 合成入口已移除。有效登录刷新保留；退出及服务端 401 返回登录页并清空账户界面，跨标签页同步的历史验证见 [Rust 验收](rust-auth-context.md)。新账号从空工作区创建首个案件，本地开发凭据在 `.env`。生产部署未做。
 
 Mindloop 专属资源已按授权清理，实测回收约 164 GB，Cube 和其他项目保留，详见[清理记录及明确保留项](mindloop-cleanup.md)。

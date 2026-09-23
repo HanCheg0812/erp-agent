@@ -1,42 +1,37 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  ArrowDownToLine, Brain, Check, ClipboardCheck, Clock3, LogIn, LogOut,
+  Brain, Check, ClipboardCheck, Clock3, LogOut,
   MessageSquare, Plus, RefreshCw, Search, ShieldCheck, X,
 } from 'lucide-react';
 import {
-  api, clearToken, demoCases, demoDetail, demoEvents, getToken, subscribeAuthChange,
+  api, clearToken, getToken, subscribeAuthChange,
   type AuditEvent, type CaseDetail, type CaseInput, type CaseRecord, type CaseStatus,
 } from './api';
 import { CaseChat, type ChatSession } from './CaseChat';
 import { PersonalMemory } from './PersonalMemory';
 import { AuthScreen } from './AuthScreen';
-import { agentStages, demoAgentProposal, initialAgentRuns, type AgentRun } from './demo-agent';
 
 const statusLabels: Record<CaseStatus, string> = {
   analyzing: 'Analyzing', awaiting_approval: 'Awaiting approval', approved: 'Approved', rejected: 'Rejected',
 };
 const formatCompactDate = (value: string) => new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(value));
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'The request failed. Please try again.';
-type Mode = 'demo' | 'connecting' | 'live' | 'error';
+type Mode = 'connecting' | 'live' | 'error';
 
 function App() {
   const [token, setSessionToken] = useState(getToken);
-  const [preview, setPreview] = useState(false);
   const [notice, setNotice] = useState('');
   useEffect(() => subscribeAuthChange(message => {
-    setSessionToken(getToken()); setPreview(false); setNotice(message);
+    setSessionToken(getToken()); setNotice(message);
   }), []);
-  if (!token && !preview) return <AuthScreen notice={notice} onDemo={() => { setNotice(''); setPreview(true); }} />;
-  return <Workspace key={token ?? 'demo'} demo={!token} onSignIn={() => { setNotice(''); setPreview(false); }} />;
+  if (!token) return <AuthScreen notice={notice} />;
+  return <Workspace key={token} />;
 }
 
-function Workspace({ demo, onSignIn }: { demo: boolean; onSignIn: () => void }) {
-  const [mode, setMode] = useState<Mode>(demo ? 'demo' : 'connecting');
-  const [cases, setCases] = useState<CaseRecord[]>(demo ? demoCases : []);
-  const [selectedId, setSelectedId] = useState(demo ? demoCases[0].id : '');
-  const [demoDetails, setDemoDetails] = useState(demoDetail);
-  const [demoAudit, setDemoAudit] = useState(() => Object.fromEntries(demoCases.map(item => [item.id, demoEvents(item.id)])));
-  const [agentRuns, setAgentRuns] = useState<Record<string, AgentRun>>(initialAgentRuns);
+function Workspace() {
+  const [mode, setMode] = useState<Mode>('connecting');
+  const [cases, setCases] = useState<CaseRecord[]>([]);
+  const [selectedId, setSelectedId] = useState('');
   const [liveDetail, setLiveDetail] = useState<CaseDetail | null>(null);
   const [liveEvents, setLiveEvents] = useState<AuditEvent[]>([]);
   const [filter, setFilter] = useState<'all' | CaseStatus>('all');
@@ -56,8 +51,8 @@ function Workspace({ demo, onSignIn }: { demo: boolean; onSignIn: () => void }) 
   const retries = useRef(new Map<string, string>());
   const conversationRequest = useRef<string | null>(null);
   const pending = useRef(false);
-  const detail = mode === 'demo' ? demoDetails[selectedId] : liveDetail?.id === selectedId ? liveDetail : null;
-  const events = mode === 'demo' ? demoAudit[selectedId] ?? [] : liveEvents;
+  const detail = liveDetail?.id === selectedId ? liveDetail : null;
+  const events = liveEvents;
 
   useEffect(() => {
     if (mode !== 'connecting') return;
@@ -101,74 +96,18 @@ function Workspace({ demo, onSignIn }: { demo: boolean; onSignIn: () => void }) 
   const counts = cases.reduce((acc, item) => { if (item.kind !== 'conversation') acc[item.status] += 1; return acc; }, { analyzing: 0, awaiting_approval: 0, approved: 0, rejected: 0 } as Record<CaseStatus, number>);
   const selectFilter = (value: 'all' | CaseStatus) => { setFilter(value); setQuery(''); setMobileNav(false); };
 
-  useEffect(() => {
-    if (mode !== 'demo' || !Object.values(agentRuns).some(run => run.status === 'running')) return;
-    const timer = window.setTimeout(() => setAgentRuns(items => Object.fromEntries(Object.entries(items).map(([caseId, run]) => [caseId,
-      run.status !== 'running' ? run : run.activeStage >= agentStages.length - 1
-        ? { ...run, status: 'complete' as const }
-        : { ...run, activeStage: run.activeStage + 1 },
-    ]))), 1500);
-    return () => window.clearTimeout(timer);
-  }, [agentRuns, mode]);
-
-  const finishDemoAnalysis = (caseId: string) => {
-    const current = demoDetails[caseId];
-    if (!current || current.status !== 'analyzing' || current.proposals.length) return;
-    const createdAt = new Date().toISOString();
-    const fixture = demoAgentProposal(current);
-    if (!fixture) return;
-    const proposal = { ...fixture, created_at: createdAt };
-    const next: CaseDetail = { ...current, status: 'awaiting_approval', version: current.version + 1, updated_at: createdAt, proposals: [proposal] };
-    setDemoDetails(items => ({ ...items, [caseId]: next }));
-    setCases(items => items.map(item => item.id === caseId ? next : item));
-    setDemoAudit(items => ({ ...items, [caseId]: [{ id: crypto.randomUUID(), event_type: 'proposal.created', payload: { proposal_id: proposal.id, source: 'demo-agent-run' }, actor_id: 'demo-agent', created_at: createdAt }, ...items[caseId]] }));
-    setToast('Demo agent finished a proposal. It is waiting for approval.');
-  };
-
-  useEffect(() => {
-    if (mode !== 'demo') return;
-    const finished = Object.entries(agentRuns).find(([caseId, run]) => run.status === 'complete' && !run.finalized && demoDetails[caseId]?.status === 'analyzing');
-    if (!finished) return;
-    const [caseId] = finished;
-    setAgentRuns(items => ({ ...items, [caseId]: { ...items[caseId], finalized: true } }));
-    finishDemoAnalysis(caseId);
-  }, [agentRuns, demoDetails, mode]);
-
-  const startAgentRun = () => {
-    if (mode !== 'demo' || !detail || !demoAgentProposal(detail)) return;
-    setAgentRuns(items => ({ ...items, [detail.id]: items[detail.id]?.status === 'paused'
-      ? { ...items[detail.id], status: 'running' }
-      : { status: 'running', activeStage: 0, finalized: !!detail.proposals.length } }));
-  };
-
-  const pauseAgentRun = () => {
-    if (mode !== 'demo' || !detail) return;
-    setAgentRuns(items => items[detail.id]?.status === 'running'
-      ? { ...items, [detail.id]: { ...items[detail.id], status: 'paused' } } : items);
-  };
-
   const decide = async (decision: 'approved' | 'rejected', comment: string) => {
     const proposal = detail?.proposals[0];
     if (!detail || !proposal || detail.status !== 'awaiting_approval' || pending.current) return;
     pending.current = true; setSaving(true);
-    if (mode === 'demo') {
-      const createdAt = new Date().toISOString();
-      const approval = { id: crypto.randomUUID(), proposal_id: proposal.id, proposal_digest: proposal.digest, decision, comment, actor_id: 'demo-approver', created_at: createdAt };
-      const next: CaseDetail = { ...detail, status: decision, version: detail.version + 1, updated_at: createdAt, approvals: [approval, ...detail.approvals] };
-      setDemoDetails(items => ({ ...items, [next.id]: next }));
-      setCases(items => items.map(item => item.id === next.id ? next : item));
-      setDemoAudit(items => ({ ...items, [next.id]: [{ id: crypto.randomUUID(), event_type: `proposal.${decision}`, payload: { proposal_id: proposal.id }, actor_id: 'demo-approver', created_at: createdAt }, ...items[next.id]] }));
-      setToast(`Demo decision recorded: ${decision}.`);
-    } else {
-      const input = { proposal_id: proposal.id, proposal_digest: proposal.digest, expected_case_version: detail.version, decision, comment };
-      const intent = JSON.stringify({ caseId: detail.id, ...input });
-      const retryKey = retries.current.get(intent) ?? crypto.randomUUID();
-      retries.current.set(intent, retryKey);
-      try {
-        await api.decide(detail.id, input, retryKey);
-        retries.current.delete(intent); setRefresh(value => value + 1); setToast(`Proposal ${decision}.`);
-      } catch (reason) { setToast(errorMessage(reason)); }
-    }
+    const input = { proposal_id: proposal.id, proposal_digest: proposal.digest, expected_case_version: detail.version, decision, comment };
+    const intent = JSON.stringify({ caseId: detail.id, ...input });
+    const retryKey = retries.current.get(intent) ?? crypto.randomUUID();
+    retries.current.set(intent, retryKey);
+    try {
+      await api.decide(detail.id, input, retryKey);
+      retries.current.delete(intent); setRefresh(value => value + 1); setToast(`Proposal ${decision}.`);
+    } catch (reason) { setToast(errorMessage(reason)); }
     pending.current = false; setSaving(false);
   };
 
@@ -177,30 +116,15 @@ function Workspace({ demo, onSignIn }: { demo: boolean; onSignIn: () => void }) 
     pending.current = true; setSaving(true);
     conversationRequest.current ??= crypto.randomUUID();
     try {
-      const createdAt = new Date().toISOString();
-      const record: CaseRecord = mode === 'demo'
-        ? { id: crypto.randomUUID(), kind: 'conversation', title: 'New conversation', customer_code: null, part_number: null, revision: null, demand_type: null, quantity_basis: 'unknown', status: 'analyzing', version: 1, owner_id: 'demo-planner', created_at: createdAt, updated_at: createdAt }
-        : await api.startConversation(conversationRequest.current);
+      const record = await api.startConversation(conversationRequest.current);
       conversationRequest.current = null;
-      if (mode === 'demo') {
-        setDemoDetails(items => ({ ...items, [record.id]: { ...record, proposals: [], approvals: [] } }));
-        setDemoAudit(items => ({ ...items, [record.id]: [] }));
-      }
       setCases(items => [record, ...items.filter(item => item.id !== record.id)]);
       setSelectedId(record.id); selectFilter('all');
     } catch (reason) { setToast(errorMessage(reason)); }
     finally { pending.current = false; setSaving(false); }
   };
 
-  const updateConversationTitle = async (id: string, firstMessage: string) => {
-    if (mode === 'demo') {
-      const current = demoDetails[id];
-      if (!current || current.kind !== 'conversation' || chatSessions[id]?.messages.length) return;
-      const next = { ...current, title: Array.from(firstMessage.trim().split(/\s+/u).join(' ')).slice(0, 80).join('') };
-      setDemoDetails(items => ({ ...items, [id]: next }));
-      setCases(items => items.map(item => item.id === id ? next : item));
-      return;
-    }
+  const updateConversationTitle = async (id: string) => {
     try {
       const next = await api.getCase(id);
       setLiveDetail(current => current?.id === id ? next : current);
@@ -216,15 +140,9 @@ function Workspace({ demo, onSignIn }: { demo: boolean; onSignIn: () => void }) 
     if ([input.title, input.customer_code, input.part_number, input.revision].some(value => !value)) { setError('Complete all required fields.'); return; }
     pending.current = true; setSaving(true); setError('');
     try {
-      const createdAt = new Date().toISOString();
-      const record: CaseRecord = mode === 'demo' ? { ...detail, ...input, kind: 'case', version: detail.version + 1, updated_at: createdAt } : await api.setCaseContext(detail.id, input, detail.version);
-      if (mode === 'demo') {
-        setDemoDetails(items => ({ ...items, [record.id]: { ...detail, ...record } }));
-        setDemoAudit(items => ({ ...items, [record.id]: [{ id: crypto.randomUUID(), event_type: 'case.context_added', payload: { version: record.version }, actor_id: record.owner_id, created_at: createdAt }, ...(items[record.id] ?? [])] }));
-      } else {
-        setLiveDetail(current => current?.id === record.id ? { ...current, ...record } : current);
-        void api.getEvents(record.id).then(audit => setLiveEvents([...audit.items].reverse())).catch(() => {});
-      }
+      const record = await api.setCaseContext(detail.id, input, detail.version);
+      setLiveDetail(current => current?.id === record.id ? { ...current, ...record } : current);
+      void api.getEvents(record.id).then(audit => setLiveEvents([...audit.items].reverse())).catch(() => {});
       setCases(items => items.map(item => item.id === record.id ? record : item)); setModal(null); setToast('Case details saved.');
     } catch (reason) { setError(errorMessage(reason)); }
     finally { pending.current = false; setSaving(false); }
@@ -238,28 +156,20 @@ function Workspace({ demo, onSignIn }: { demo: boolean; onSignIn: () => void }) 
     if (current === getToken()) clearToken(notice);
   };
 
-  const exportCases = () => {
-    const blob = new Blob([JSON.stringify(filteredCases, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'change-cases.json'; anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const ready = mode === 'demo' || mode === 'live';
+  const ready = mode === 'live';
   return <div className="chat-app">
     {mobileNav && <button className="chat-nav-backdrop" aria-label="Close conversations" onClick={() => setMobileNav(false)} />}
     <aside className={`conversation-sidebar ${mobileNav ? 'is-open' : ''}`} aria-label="Case conversations">
       <div className="sidebar-brand"><div className="brand-mark">F</div><strong>Forge</strong><button className="icon-button mobile-close" aria-label="Close conversations" title="Close conversations" onClick={() => setMobileNav(false)}><X size={18} /></button></div>
-      {mode === 'demo' && <button className="button primary-button demo-sign-in" onClick={onSignIn}><LogIn size={16} />Sign in</button>}
-      <button className="button new-conversation" onClick={() => void startConversation()} disabled={!ready || saving || (mode === 'live' && !roles.includes('planner'))}><Plus size={16} />New conversation</button>
-      <div className="conversation-search"><Search size={15} /><input aria-label="Search cases" placeholder="Search conversations" value={query} onChange={event => setQuery(event.target.value)} /><button className="icon-button" aria-label="Refresh cases" title="Refresh cases" onClick={() => mode === 'live' ? setMode('connecting') : setToast('Demo conversations are up to date.')} disabled={!ready}><RefreshCw size={14} /></button></div>
+      <button className="button new-conversation" onClick={() => void startConversation()} disabled={!ready || saving || !roles.includes('planner')}><Plus size={16} />New conversation</button>
+      <div className="conversation-search"><Search size={15} /><input aria-label="Search cases" placeholder="Search conversations" value={query} onChange={event => setQuery(event.target.value)} /><button className="icon-button" aria-label="Refresh cases" title="Refresh cases" onClick={() => setMode('connecting')} disabled={!ready}><RefreshCw size={14} /></button></div>
       <nav className="conversation-list" aria-label="Conversations">
         {filteredCases.map(item => <CaseRow key={item.id} item={item} selected={selectedId === item.id} onClick={() => { setSelectedId(item.id); setMobileNav(false); }} />)}
         {ready && !filteredCases.length && <div className="empty-state"><Search size={20} /><p>No matching conversations.</p>{cases.length > 0 && <button className="text-button" onClick={() => selectFilter('all')}>Clear filters</button>}</div>}
       </nav>
       <div className="sidebar-bottom">
         <button className={`review-queue ${filter === 'awaiting_approval' ? 'selected' : ''}`} onClick={() => setFilter(filter === 'awaiting_approval' ? 'all' : 'awaiting_approval')}><ClipboardCheck size={16} /><span>Needs your review</span><span>{counts.awaiting_approval}</span></button>
-        <div className="sidebar-account"><ShieldCheck size={18} /><div><strong>{mode === 'demo' ? 'Demo session' : mode === 'live' ? 'Account' : 'Connection pending'}</strong><small title={email}>{mode === 'demo' ? 'Synthetic data only' : email}</small></div>{mode === 'live' ? <button className="icon-button" title="Personal memory" aria-label="Personal memory" onClick={() => setMemoryOpen(true)}><Brain size={16} /></button> : <button className="icon-button" title="Export cases" aria-label="Export cases" onClick={exportCases} disabled={!ready || !filteredCases.length}><ArrowDownToLine size={16} /></button>}{mode === 'demo' ? <button className="icon-button" aria-label="Leave demo" title="Leave demo" onClick={onSignIn}><LogOut size={17} /></button> : <button className="icon-button" onClick={disconnect} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button>}</div>
+        <div className="sidebar-account"><ShieldCheck size={18} /><div><strong>{ready ? 'Account' : 'Connection pending'}</strong><small title={email}>{email}</small></div><button className="icon-button" title="Personal memory" aria-label="Personal memory" onClick={() => setMemoryOpen(true)} disabled={!ready}><Brain size={16} /></button><button className="icon-button" onClick={disconnect} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button></div>
       </div>
     </aside>
     <main className="chat-main">
@@ -267,7 +177,7 @@ function Workspace({ demo, onSignIn }: { demo: boolean; onSignIn: () => void }) 
       {!ready ? <div className="empty-state" role="status"><h2>{mode === 'connecting' ? 'Connecting' : 'Service unavailable'}</h2><p>{error || 'Loading conversations and account permissions.'}</p>{mode === 'error' && <button className="button secondary-button" onClick={() => setMode('connecting')}><RefreshCw size={15} />Retry</button>}</div>
         : loading && !detail ? <div className="empty-state" role="status">Loading conversation...</div>
         : detailError ? <div className="empty-state" role="alert"><p>{detailError}</p><button className="button secondary-button" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15} />Retry</button></div>
-        : detail ? <CaseChat key={`${mode}-${detail.id}`} detail={detail} events={events} run={agentRuns[detail.id]} demoMode={mode === 'demo'} onRun={startAgentRun} onPause={pauseAgentRun} onDecide={decide} busy={saving} canApprove={mode === 'demo' || roles.includes('approver')} onNavigation={() => setMobileNav(true)} session={chatSessions[detail.id] ?? { draft: '', messages: [] }} onSession={session => setChatSessions(items => ({ ...items, [detail.id]: session }))} onSent={text => void updateConversationTitle(detail.id, text)} onVersionChange={() => setRefresh(value => value + 1)} onAddCaseDetails={mode === 'demo' || roles.includes('planner') ? () => { setError(''); setModal('create'); } : undefined} />
+        : detail ? <CaseChat key={`${mode}-${detail.id}`} detail={detail} events={events} onDecide={decide} busy={saving} canApprove={roles.includes('approver')} onNavigation={() => setMobileNav(true)} session={chatSessions[detail.id] ?? { draft: '' }} onSession={session => setChatSessions(items => ({ ...items, [detail.id]: session }))} onSent={() => void updateConversationTitle(detail.id)} onVersionChange={() => setRefresh(value => value + 1)} onAddCaseDetails={roles.includes('planner') ? () => { setError(''); setModal('create'); } : undefined} />
         : <div className="empty-state"><MessageSquare size={26} /><h2>{cases.length ? 'No conversation selected' : 'No conversations yet'}</h2>{cases.length ? <button className="button secondary-button" onClick={() => setMobileNav(true)}>Open conversations</button> : roles.includes('planner') && <button className="button primary-button" disabled={saving} onClick={() => void startConversation()}><Plus size={16} />Start a conversation</button>}</div>}
     </main>
     {modal && detail && <Dialog title="Add case details" busy={saving} onClose={() => { setModal(null); setError(''); }}><form onSubmit={addCaseDetails} className="case-form">
