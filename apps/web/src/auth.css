@@ -1,0 +1,28 @@
+.auth-page { min-height: 100dvh; display: flex; flex-direction: column; background: #fff; }
+.auth-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; min-height: 80px; padding: 20px 32px; border-bottom: 1px solid #eee; }
+.auth-brand { display: flex; align-items: center; gap: 10px; font-size: 19px; }
+.auth-demo { gap: 8px; font-size: 13px; color: #666; }
+.auth-main { flex: 1; display: grid; align-items: center; justify-items: center; padding: 64px 24px 104px; }
+.auth-content { width: 100%; max-width: 360px; }
+.auth-content h1 { font-size: 26px; font-weight: 600; line-height: 1.3; margin-bottom: 36px; overflow-wrap: anywhere; }
+.auth-form { display: flex; flex-direction: column; }
+.auth-form label { margin-bottom: 9px; font-size: 13px; font-weight: 500; color: #444; }
+.auth-form input { width: 100%; min-width: 0; height: 46px; padding: 10px 12px; border: 1px solid #ccc; border-radius: 5px; background: #fff; color: #242424; font-size: 16px; }
+.auth-form > input { margin-bottom: 24px; }
+.auth-password { position: relative; }
+.auth-password input { padding-right: 48px; }
+.auth-password .icon-button { position: absolute; right: 5px; top: 5px; width: 36px; height: 36px; }
+.auth-hint { color: #666; font-size: 12px; margin-top: 9px; }
+.auth-notice { padding: 12px; margin-top: 18px; font-size: 13px; line-height: 1.6; color: #444; background: #f3f3f3; border-left: 2px solid #777; overflow-wrap: anywhere; }
+.auth-submit { min-height: 46px; margin-top: 28px; font-size: 14px; }
+.auth-switcher { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 6px; margin-top: 26px; color: #666; font-size: 13px; line-height: 1.6; }
+.auth-switcher .text-button { color: #242424; font-size: inherit; font-weight: 550; text-decoration: underline; text-underline-offset: 3px; }
+.demo-sign-in { margin: 0 4px 12px; min-height: 38px; }
+@media (max-width: 767px) {
+  .auth-header { min-height: 72px; padding: 18px 20px; }
+  .auth-main { padding: 48px 24px 72px; }
+  .auth-content h1 { font-size: 24px; }
+}
+@media (max-height: 600px) {
+  .auth-main { padding-block: 32px; }
+}

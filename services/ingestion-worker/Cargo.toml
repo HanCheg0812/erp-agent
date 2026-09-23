@@ -1,0 +1,22 @@
+[package]
+name = "erp-ingestion"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+calamine = "0.36.1"
+quick-xml = "0.42.0"
+zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
+tempfile = "3"
+tokio = { version = "1", features = ["process", "time", "fs", "rt"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }

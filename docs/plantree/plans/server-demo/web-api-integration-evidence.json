@@ -1,0 +1,95 @@
+{
+  "started": "2026-09-21T16:02:37.272Z",
+  "screenshots": [
+    "/tmp/erp-live-integration/desktop-saved.png",
+    "/tmp/erp-live-integration/desktop-proposal.png",
+    "/tmp/erp-live-integration/mobile-390-proposal.png",
+    "/tmp/erp-live-integration/mobile-320-proposal.png",
+    "/tmp/erp-live-integration/desktop-approved.png"
+  ],
+  "checks": [
+    {
+      "name": "desktop-saved",
+      "width": 1440,
+      "height": 1000,
+      "scrollWidth": 1440,
+      "composerBottom": 984
+    },
+    {
+      "name": "desktop-proposal",
+      "width": 1440,
+      "height": 1000,
+      "scrollWidth": 1440,
+      "composerBottom": 984
+    },
+    {
+      "name": "mobile-390-proposal",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "composerBottom": 833
+    },
+    {
+      "name": "mobile-320-proposal",
+      "width": 320,
+      "height": 844,
+      "scrollWidth": 320,
+      "composerBottom": 833
+    },
+    {
+      "name": "desktop-approved",
+      "width": 1440,
+      "height": 1000,
+      "scrollWidth": 1440,
+      "composerBottom": 984
+    }
+  ],
+  "cube": {
+    "createMs": 84,
+    "created": {
+      "id": "350474a3-0a98-418a-9012-104b7159b072",
+      "session_id": "session_8451ba1f13b94438bc53abef51efe8bb",
+      "sandbox_id": "bd7502fb6cd24d40965cc662c7780474",
+      "state": "provisioned",
+      "provider_state": "running",
+      "guest_ready": true,
+      "error_code": null,
+      "created_at": "2026-09-21T16:02:38.202Z",
+      "expires_at": "2026-09-21T16:17:38.202Z",
+      "checked_at": "2026-09-21T16:02:38.266Z"
+    },
+    "releaseMs": 72,
+    "released": {
+      "id": "350474a3-0a98-418a-9012-104b7159b072",
+      "session_id": "session_8451ba1f13b94438bc53abef51efe8bb",
+      "sandbox_id": "bd7502fb6cd24d40965cc662c7780474",
+      "state": "released",
+      "provider_state": null,
+      "guest_ready": false,
+      "error_code": null,
+      "created_at": "2026-09-21T16:02:38.202Z",
+      "expires_at": "2026-09-21T16:17:38.202Z",
+      "checked_at": "2026-09-21T16:02:39.394Z"
+    }
+  },
+  "caseId": "a324c76a-3344-422b-816e-589a9ce612b6",
+  "sessionId": "session_8451ba1f13b94438bc53abef51efe8bb",
+  "proposalId": "43438679-a16c-4de3-9d9d-9a0050eae8f1",
+  "database": {
+    "messages": 1,
+    "conversations": 1,
+    "approvals": 1
+  },
+  "audit": [
+    "case.created",
+    "conversation.message_saved",
+    "sandbox.creating",
+    "sandbox.provisioned",
+    "proposal.created",
+    "proposal.approved",
+    "sandbox.releasing",
+    "sandbox.released"
+  ],
+  "passed": true,
+  "errors": []
+}

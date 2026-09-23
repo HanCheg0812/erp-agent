@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1180" viewBox="0 0 1440 1180" role="img" aria-labelledby="title desc">
+<title id="title">CubeSandbox 承载 JCode 的服务器架构</title>
+<desc id="desc">业务后台管理 Cube 沙箱生命周期。沙箱内 Runtime Bridge 通过本地 SDK 连接 JCode，JCode 使用限定工具访问外部 ERP、知识库和共享模型服务。</desc>
+<defs>
+<pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#263247" stroke-width="0.5"/></pattern>
+<marker id="arrow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#94a3b8"/></marker>
+<marker id="amber" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#fbbf24"/></marker>
+<style>
+text{font-family:'Noto Sans CJK SC','Microsoft YaHei',sans-serif;letter-spacing:0;fill:#e2e8f0}.name{font-size:23px;font-weight:700}.detail{font-size:18px;fill:#bac8d8}.label{font-size:16px;fill:#bac8d8}
+.line{fill:none;stroke:#94a3b8;stroke-width:2;marker-end:url(#arrow)}.control{fill:none;stroke:#fbbf24;stroke-width:2;stroke-dasharray:7 6;marker-end:url(#amber)}
+.box{stroke-width:1.6;rx:8}.primary{fill:#123140;stroke:#22d3ee}.service{fill:#123a33;stroke:#34d399}.store{fill:#302443;stroke:#a78bfa}.infra{fill:#3c3021;stroke:#fbbf24}.bus{fill:#422f25;stroke:#fb923c}
+</style></defs>
+<rect width="1440" height="1180" fill="#0f172a"/><rect width="1440" height="1180" fill="url(#grid)"/>
+<text x="50" y="50" font-size="32" font-weight="700">CubeSandbox + JCode：面向服务器的业务 Agent</text>
+<text x="50" y="86" class="detail">自建 Web · 预热与复用 · 保留 todo · 关闭通用 Bash · 共享 ERP、知识库与 GPU 服务</text>
+<rect x="50" y="337" width="920" height="427" rx="8" fill="none" stroke="#fbbf24" stroke-width="2"/>
+<path class="line" d="M340 182H430"/><path class="line" d="M850 162H1060"/>
+<path class="control" d="M850 211H1000V287H1060"/><path class="control" d="M1230 332V355H970"/>
+<path class="line" d="M560 238V290H25V465H85"/><path class="line" d="M370 465H470"/>
+<path class="line" d="M845 465H1080"/><path class="line" d="M665 520V585"/><path class="line" d="M470 643H370"/>
+<path class="line" d="M620 695V810H255V853"/><path class="line" d="M735 695V853"/>
+<path class="line" d="M1210 1005V910H945"/>
+<rect x="50" y="130" width="290" height="108" class="box primary"/>
+<text x="75" y="173" class="name">业务 Web / React</text><text x="75" y="207" class="detail">对话 / 差异 / 审批 / 跟踪</text>
+<rect x="430" y="130" width="420" height="108" class="box service"/>
+<text x="455" y="173" class="name">业务后台 + 调度器</text><text x="455" y="207" class="detail">身份校验 · 案件状态 · 沙箱生命周期</text>
+<rect x="1060" y="120" width="330" height="85" class="box store"/>
+<text x="1080" y="155" class="name">持久化业务数据</text><text x="1080" y="184" class="detail">审批 / 事件 / 单据关联 / 产物</text>
+<rect x="1060" y="247" width="330" height="85" class="box infra"/>
+<text x="1080" y="282" class="name">Cube 控制面</text><text x="1080" y="311" class="detail">预热 / 配额 / 暂停 / 恢复 / 释放</text>
+<text x="258" y="277" class="label">受鉴权的内部 HTTP / SSE</text>
+<text x="75" y="373" class="name" style="fill:#fbbf24">Cube Sandbox：一个活跃案件会话的隔离环境</text>
+<rect x="85" y="410" width="285" height="110" class="box service"/>
+<text x="105" y="452" class="name">Runtime Bridge</text><text x="105" y="484" class="detail">Node + 官方 JCode SDK</text>
+<text x="381" y="445" class="label">本地 socket</text>
+<rect x="470" y="410" width="375" height="110" class="box service"/>
+<text x="495" y="451" class="name">JCode / Rust Harness</text><text x="495" y="484" class="detail">业务 Prompt · Loop · todo · read</text>
+<rect x="85" y="585" width="285" height="110" class="box store"/>
+<text x="105" y="627" class="name">案件工作目录</text><text x="105" y="659" class="detail">附件 / 会话 / 临时产物</text>
+<rect x="470" y="585" width="375" height="110" class="box bus"/>
+<text x="495" y="627" class="name">受控 stdio MCP 网关</text><text x="495" y="659" class="detail">限定工具与范围 · 转接外部 HTTP</text>
+<text x="680" y="559" class="label">白名单工具调用</text>
+<text x="75" y="740" class="detail">会话内复用实例与连接；空闲保存后暂停</text>
+<rect x="1080" y="410" width="310" height="110" class="box infra"/>
+<text x="1100" y="452" class="name">共享模型服务 / GPU</text><text x="1100" y="484" class="detail">模型常驻 · 批处理 · 并发预算</text>
+<text x="1055" y="580" class="detail">在线请求与批量解析分队列</text><text x="1055" y="614" class="detail">只读查询合并、有界并行</text>
+<text x="1055" y="668" class="detail">业务状态持久化在沙箱外</text><text x="1055" y="702" class="detail">ERP 凭据保留在适配器内</text><text x="1055" y="736" class="detail">快照回滚不撤销 ERP 写入</text>
+<text x="50" y="825" class="label">共享业务服务：独立于任何单个沙箱</text>
+<rect x="50" y="853" width="410" height="115" class="box service"/>
+<text x="75" y="895" class="name">ERP 业务适配器 → ERPNext</text><text x="75" y="929" class="detail">规则 / 审批 / 幂等 / 订单与生产采购</text>
+<rect x="535" y="853" width="410" height="115" class="box store"/>
+<text x="560" y="895" class="name">权限校验 → OpenViking MCP</text><text x="560" y="929" class="detail">客户 / 零件 / 版本 / 原文引用</text>
+<rect x="1050" y="1005" width="340" height="105" class="box service"/>
+<text x="1075" y="1043" class="name">持久队列 + 异步 Worker</text><text x="1075" y="1073" class="detail">MinerU / 表格 → 校验 → 索引</text><text x="1075" y="1097" class="label">job_id · 阶段进度 · 幂等重试</text>
+<text x="50" y="1033" class="detail">部署：符合 KVM/PVM 与存储要求的 Linux 主机；也可用 CPU 节点承载 Cube。</text>
+<text x="50" y="1071" class="detail">实测：冷启动 / 暖恢复 / 首字延迟 / 工具 P95 / 案件吞吐 / 资源峰值。</text>
+<path class="line" d="M50 1136H103"/><text x="118" y="1142" class="label">调用 / 数据流</text><path class="control" d="M320 1136H373"/><text x="390" y="1142" class="label">沙箱管理</text>
+<text x="1010" y="1142" class="label">部署架构建议 · 尚未联调验证</text>
+</svg>

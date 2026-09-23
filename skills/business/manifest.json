@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "business-guidance@2",
+  "skills": [
+    {"id":"demand-change-review","version":"1.1.0","tags":["需求","变更","数量","总量","交期","订单","替换","demand","quantity","delivery"],"requires":["case_read","todo"],"license":"LicenseRef-Project-Internal"},
+    {"id":"evidence-reading","version":"1.1.0","tags":["证据","资料","检索","来源","规格","evidence","search","source"],"requires":["mcp__openviking__search_case_knowledge","mcp__openviking__read_knowledge_source"],"license":"LicenseRef-Project-Internal"},
+    {"id":"drawing-table-review","version":"1.1.0","tags":["图纸","图片","扫描","表格","尺寸","单位","drawing","table","image"],"requires":["mcp__openviking__read_knowledge_source"],"license":"LicenseRef-Project-Internal"},
+    {"id":"erp-fact-check","version":"1.1.0","tags":["库存","供应","实时","订单","ERP","stock","order"],"requires":["mcp__erp__read_erp_order"],"license":"LicenseRef-Project-Internal"}
+  ]
+}

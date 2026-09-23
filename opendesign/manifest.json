@@ -1,0 +1,34 @@
+{
+  "generated": "2026-09-21T17:07:49.027Z",
+  "sections": [
+    {
+      "id": "mockups",
+      "label": "Mockups",
+      "groups": [
+        {
+          "slug": "forge-change-operations",
+          "files": [
+            {
+              "label": "index.html",
+              "path": "mockups/forge-change-operations/index.html"
+            }
+          ]
+        },
+        {
+          "slug": "forge-node-flow",
+          "files": [
+            {
+              "label": "index.html",
+              "path": "mockups/forge-node-flow/index.html"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "design-systems",
+      "label": "Design Systems",
+      "groups": []
+    }
+  ]
+}

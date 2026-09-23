@@ -1,0 +1,742 @@
+{
+  "inventoryAt": "2026-09-21T15:39:32.765Z",
+  "removedDockerContainers": [
+    {
+      "name": "/local-dev-vector-1",
+      "image": "timberio/vector:0.51.X-alpine",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-tempo-1",
+      "image": "grafana/tempo:2.8.2",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-postgres-1",
+      "image": "postgres:17.4",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/memcached",
+      "image": "memcached:1.6.38",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-redis-1",
+      "image": "redis:7.4.2",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-socks5-1",
+      "image": "python:3.12-alpine",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-tempo-init-1",
+      "image": "bash",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-mimir-1",
+      "image": "grafana/mimir:2.17.1",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-loki-1",
+      "image": "grafana/loki:3.4.1",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-clickhouse-1",
+      "image": "clickhouse:25.4.5.24",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-grafana-1",
+      "image": "grafana/grafana:12.0.0",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/local-dev-otel-collector-1",
+      "image": "otel/opentelemetry-collector-contrib:0.146.0",
+      "sourceDirectory": "/tmp/e2b-infra/packages/local-dev"
+    },
+    {
+      "name": "/mindloop-local-registry",
+      "image": "registry:2"
+    }
+  ],
+  "removedDockerVolumes": [
+    "local-dev_tempo",
+    "local-dev_postgres",
+    "f3bdfbc0261c6942d170c94d240c7c990a4cac4bf9e808567ab84938a5a29a42",
+    "e366e2a741a8c72fc53354975a3b248537f28d2697ae9e339a7cfcc670862d7e",
+    "local-dev_clickhouse",
+    "bacba8eb1fb0ddb4886aad99c19338fbda9079bd13c6edbf0699aee13db4a9d6"
+  ],
+  "removedDockerImages": [
+    {
+      "tag": "mindloop/k8s-control-plane:r134e-debug-no-llm-skip-real-prepare-20260630T105645Z",
+      "imageId": "58185d26ed1a"
+    },
+    {
+      "tag": "mindloop/k8s-control-plane:r134d-debug-no-llm-metadata-20260630T104749Z",
+      "imageId": "80dca294c429"
+    },
+    {
+      "tag": "mindloop/k8s-control-plane:r134c-debug-no-llm-top-level-20260630T103145Z",
+      "imageId": "55dfc94d7dcd"
+    },
+    {
+      "tag": "mindloop/k8s-control-plane:debug-builder-context",
+      "imageId": "60e75a74a9f8"
+    },
+    {
+      "tag": "mindloop/k8s-control-plane:r134b-debug-no-llm-runtime-field-20260630T100754Z",
+      "imageId": "f8c2751796fb"
+    },
+    {
+      "tag": "mindloop/k8s-control-plane:r134-debug-no-llm-product-gate-20260630T095014Z",
+      "imageId": "48e98c9accc1"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r118-workspace-git-terminal-lease-gc-20260629T091951Z",
+      "imageId": "0a50ff3ec650"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r117-claim-time-producer-gc-20260629T085246Z",
+      "imageId": "36af78bb3d7e"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r116-inflight-locality-20260629T083527Z",
+      "imageId": "f40f747da661"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r102-wpd-scope-live-20260628T131059Z",
+      "imageId": "de394bc39c2f"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r101-workspace-git-snapshot-gc-20260628T064633Z",
+      "imageId": "64d86225af25"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r100-fork-ready-refill-margin-20260627T144231Z",
+      "imageId": "fc9606ad39a2"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r99-fork-ready-eligible-accounting-20260627T142254Z",
+      "imageId": "2f9df45e8781"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r98-bind-observe-20260627T125050Z",
+      "imageId": "81eaba10d81f"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r97b-overflow-grace-20260627T090924Z",
+      "imageId": "299c9af9a1bb"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r97-overflow-warming-20260627T085702Z",
+      "imageId": "24d877c0ec65"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r96-workspace-head-profile-20260627T081620Z",
+      "imageId": "b1c78bd9309e"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r95-fork-ready-skip-l0-scan-20260627T063615Z",
+      "imageId": "2c56676d42de"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r94-fork-ready-owner-target-20260627T034619Z",
+      "imageId": "cc732004a702"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r93-fork-ready-claimable-age-20260627T031043Z",
+      "imageId": "82d157f09e4d"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r91-route-wait-filter-before-limit-20260627T023235Z",
+      "imageId": "d0c6ae0361f0"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r90-route-wait-sweep-diagnostics-20260627T022506Z",
+      "imageId": "f71c1874d90d"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r89-route-wait-aged-ready-sweep-20260627T021338Z",
+      "imageId": "07fe4e51fd25"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r88-fork-ready-admission-target-20260627T013722Z",
+      "imageId": "4c51e604f20c"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r87-fork-ready-observed-cleanup-20260627T012227Z",
+      "imageId": "741283c0c75f"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r86-fork-ready-owner-demand-aggregate-20260627T010429Z",
+      "imageId": "286736f25a53"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r85-fork-ready-late-bind-claim-spec-20260627T004021Z",
+      "imageId": "282f471040bc"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r84-fork-ready-late-bind-error-chain-20260627T002536Z",
+      "imageId": "b98ac8190813"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r83-fork-ready-reserve-sql-cast-20260627T000315Z",
+      "imageId": "2da0dfa2cf4b"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r82-missing-handle-fork-child-cleanup-20260626T234513Z",
+      "imageId": "cbed3e716819"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r81-stale-fork-child-cleanup-20260626T232958Z",
+      "imageId": "3cd89e384893"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r80-template-manifest-stable-20260626T230626Z",
+      "imageId": "7b654e1c007f"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r79-fork-ready-producer-bound-20260626T224506Z",
+      "imageId": "475510b1fa71"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r78-fork-ready-page-source-20260626T223202Z",
+      "imageId": "acd0f0a54066"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r77-fork-ready-error-chain-20260626T221210Z",
+      "imageId": "5c2281c9dd7a"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r76-fork-ready-auth-boundary-20260626T220520Z",
+      "imageId": "35eaa27c8044"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r75-fork-ready-producer-20260626T213931Z",
+      "imageId": "990c9c07a510"
+    },
+    {
+      "tag": "mindloop-sandbox-base:latest",
+      "imageId": "9d4c98bcbace"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r74-fork-source-pins-20260626T153707Z",
+      "imageId": "c96605cc00b6"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r73-fork-supply-durable-presupply-20260626T144039Z",
+      "imageId": "d7144e4e69f6"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r72-fork-supply-persistent-wpd-20260626T134719Z",
+      "imageId": "e54d34daeb27"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r71-fork-supply-wpd-dedupe-20260626T131605Z",
+      "imageId": "b002498c0458"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r70-fork-supply-inventory-20260626T124329Z",
+      "imageId": "a461e9f324c8"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r69-shared-file-fork-step4b-20260626T115955Z",
+      "imageId": "dadad3dba450"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r69-shared-file-fork-product-20260626T120522Z",
+      "imageId": "a530480ad33b"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r68-clean-template-fork-product-canary-20260626T094637Z",
+      "imageId": "41d1fcf29932"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r67-uffd-restore-fallback-20260625T175616Z",
+      "imageId": "33863ea9e64d"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r66-route-wait-age-grace-20260625T120517Z",
+      "imageId": "9989f6ef9271"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r65-claimtime-gen-gc-20260625T143500Z",
+      "imageId": "77a836463516"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r64-uffd-poll-metrics-20260625T073740Z",
+      "imageId": "fee228fcae32"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r64-uffd-poll-20260625T071509Z",
+      "imageId": "d2dc105a898a"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r64-uffd-mapping-20260625T055919Z",
+      "imageId": "6f71fd5a7410"
+    },
+    {
+      "tag": "mindloop/k8s-control-plane:local",
+      "imageId": "7b3694d7dca1"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r64-uffd-controlled-l1-20260625T020436Z",
+      "imageId": "7b3694d7dca1"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-basewarm-prewarm-router-20260624T145835Z",
+      "imageId": "ae59bd814d61"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-basewarm-prewarm-ab-20260624T141225Z",
+      "imageId": "60f23035b0d4"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-stale-route-wait-gc-20260624T093621Z",
+      "imageId": "7f98b182ba99"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-sps-publication-source-20260624T080759Z",
+      "imageId": "2e532f944e9a"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-sps-artifact-source-split-20260624T065703Z",
+      "imageId": "1cc9e1b13681"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-live-restore-cleanup-20260624T042842Z",
+      "imageId": "3c7496e32ef1"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-live-cleanup-20260624T035047Z",
+      "imageId": "18da18942e68"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-wpd-worktree4-20260624T010316Z",
+      "imageId": "9a4ac7120758"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-wpd-worktree3-20260624T001031Z",
+      "imageId": "8fc01adfd7cb"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-wpd-worktree2-20260623T234414Z",
+      "imageId": "6a80a9c58eeb"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-wpd-worktree-20260623T225227Z",
+      "imageId": "d60d4eb01ff6"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-wpd-hydrate-20260623T220108Z",
+      "imageId": "1220fff3a3ba"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-grpc-inflight-profile-20260623T144237Z",
+      "imageId": "2e66e63e0f4c"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-start-session-diag-20260623T075324Z",
+      "imageId": "089a4a0dfab0"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-lazy-session-store-20260623T094335Z",
+      "imageId": "3d41936a7821"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-grpc-route-early-prewarm-20260623T051241Z",
+      "imageId": "8f24aae17781"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-grpc-no-pgdiag-20260623T060732Z",
+      "imageId": "2a2c14349aa1"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-grpc-route-prewarm-20260623T030405Z",
+      "imageId": "f6ab4393a8b7"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-runtime-delta-session-start-manifest-20260622T200603Z",
+      "imageId": "eb3d12bc7a16"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-runtime-delta-tombstone-readmodel-20260622T194721Z",
+      "imageId": "0b8048216e6a"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-runtime-delta-manifest-baseline-20260622T192130Z",
+      "imageId": "bae3d33b8561"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-runtime-delta-backend-id-20260622T181856Z",
+      "imageId": "11e6a86f01d3"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-runtime-delta-fix-20260622T173512Z",
+      "imageId": "3899c1685bae"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-runtime-delta-20260622T152050Z",
+      "imageId": "cb0e74d10b0b"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-release-deadlock-20260622T052935Z",
+      "imageId": "37a4aaae2d37"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-source-resolution-20260621T152733Z",
+      "imageId": "364b245ce618"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-release-runtime-sync-20260621T135302Z",
+      "imageId": "e07e1c5ed694"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-final-20260621T132301Z",
+      "imageId": "839c3ff4a2be"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-release-overlay-20260621T102355Z",
+      "imageId": "c9829c7508d7"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-manifest-route-20260621T094915Z",
+      "imageId": "4474a912b35c"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r63-manifest-authority-20260621T091940Z",
+      "imageId": "0e2ed3003e03"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r62-r61-live-s3-20260621T044708Z",
+      "imageId": "0b6707fef981"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r62-r61-live-20260621T033334Z",
+      "imageId": "cf53cd923778"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r57-git-outbox-20260620T1115Z",
+      "imageId": "b8075c54334c"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r56b-write-file-git-bypass-20260620T090533Z",
+      "imageId": "4dfc8b3b8699"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r56-write-file-timing-20260620T082616Z",
+      "imageId": "8f0a73698532"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r55-memory-prewarm2-20260619T231249Z",
+      "imageId": "f2efaadc433b"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r55-memory-prewarm-20260619T224706Z",
+      "imageId": "36c483b2384b"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r54-preinit-claim-git30-20260619T165509Z",
+      "imageId": "aeffe6fa5b60"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r54-preinit-claim-20260619T163207Z",
+      "imageId": "bb6967f9870e"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r54-artifact-maint-gate-20260619T152709Z",
+      "imageId": "062671f26ee7"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r54-factory-bypass-20260619T131205Z",
+      "imageId": "2d8caa36849b"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r54-artifact-guard-20260619T093222Z",
+      "imageId": "7b25802a3ddc"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r54-neutral-targetn-retirefix-20260619T052645Z",
+      "imageId": "656bafcb4bc3"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r54-neutral-targetn-retirefix2-20260619T055659Z",
+      "imageId": "656bafcb4bc3"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r54-neutral-targetn-20260619T035815Z",
+      "imageId": "7ea1cc39f86b"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r53-neutral-held-release-finalizer-20260618T155347Z",
+      "imageId": "cc8ad575e7b4"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r53-neutral-held-release-policy-20260618T150052Z",
+      "imageId": "a9b0a7271e78"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r53-neutral-held-owner-ledger-20260618T140810Z",
+      "imageId": "b47130f73274"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r53-neutral-held-claimgate-20260618T132244Z",
+      "imageId": "10a576d73030"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r53-neutral-held-singletonfix-20260618T121604Z",
+      "imageId": "d281f34f2571"
+    },
+    {
+      "tag": "localhost:5000/mindloop/k8s-control-plane:r53-neutral-held-20260618T113508Z",
+      "imageId": "ebf8c2d8c5f1"
+    }
+  ],
+  "removedKubernetesRbac": [
+    {
+      "kind": "ClusterRole",
+      "name": "mindloop-gateway-local"
+    },
+    {
+      "kind": "ClusterRole",
+      "name": "mindloop-node-agent-local"
+    },
+    {
+      "kind": "ClusterRole",
+      "name": "mindloop-operator-local"
+    },
+    {
+      "kind": "ClusterRoleBinding",
+      "name": "mindloop-gateway-local"
+    },
+    {
+      "kind": "ClusterRoleBinding",
+      "name": "mindloop-node-agent-local"
+    },
+    {
+      "kind": "ClusterRoleBinding",
+      "name": "mindloop-operator-local"
+    }
+  ],
+  "removedKubernetesPv": [
+    {
+      "name": "pvc-763f01d0-357f-4024-af31-ab4525648add",
+      "namespace": "mindloop-local-k8s",
+      "path": "/var/lib/rancher/k3s/storage/pvc-763f01d0-357f-4024-af31-ab4525648add_mindloop-local-k8s_mindloop-forgejo-data",
+      "reclaim": "Delete"
+    }
+  ],
+  "removedCustomResourceCounts": {
+    "sandboxpools": 1,
+    "sandboxes": 20,
+    "sandboxnodehealths": 1,
+    "preparedallocationrequests": 362,
+    "workspaceprepareddemands": 3004
+  },
+  "verified": {
+    "at": "2026-09-21T15:44:57.676Z",
+    "missingPreservedContainers": [],
+    "residualOwnedContainers": [],
+    "residualMindloopImageTags": [],
+    "residualOwnedPaths": [],
+    "namespaces": [
+      "default",
+      "kube-node-lease",
+      "kube-public",
+      "kube-system"
+    ],
+    "residualMindloopCrds": [],
+    "residualMindloopRbac": [],
+    "pv": [],
+    "sharedPods": [
+      {
+        "namespace": "kube-system",
+        "name": "coredns-b9cdc8bf5-4xlh5",
+        "phase": "Running",
+        "ready": true
+      },
+      {
+        "namespace": "kube-system",
+        "name": "local-path-provisioner-58d557dc48-gw7v4",
+        "phase": "Running",
+        "ready": true
+      },
+      {
+        "namespace": "kube-system",
+        "name": "metrics-server-7c86f97b8d-hzrvt",
+        "phase": "Running",
+        "ready": true
+      }
+    ],
+    "cubeMount": "/data/cubelet /dev/loop0 xfs",
+    "cubeImagePresent": true,
+    "disk": {
+      "usedBefore": 862632980480,
+      "availableBefore": 92617641984,
+      "usedAfter": 698694049792,
+      "availableAfter": 256556572672,
+      "usePercent": "74%",
+      "netReclaimed": 163938930688
+    },
+    "preservedContainers": [
+      {
+        "name": "/erp-agent-postgres-1",
+        "image": "postgres:17.6-bookworm",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-backend-1",
+        "image": "frappe/erpnext:v16.35.0",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-queue-short-1",
+        "image": "frappe/erpnext:v16.35.0",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-queue-long-1",
+        "image": "frappe/erpnext:v16.35.0",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-scheduler-1",
+        "image": "frappe/erpnext:v16.35.0",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-create-site-1",
+        "image": "frappe/erpnext:v16.35.0",
+        "running": false
+      },
+      {
+        "name": "/garment-demo-configurator-1",
+        "image": "frappe/erpnext:v16.35.0",
+        "running": false
+      },
+      {
+        "name": "/garment-demo-frontend-1",
+        "image": "frappe/erpnext:v16.35.0",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-websocket-1",
+        "image": "frappe/erpnext:v16.35.0",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-redis-cache-1",
+        "image": "redis:6.2-alpine",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-db-1",
+        "image": "mariadb:11.8",
+        "running": true
+      },
+      {
+        "name": "/garment-demo-redis-queue-1",
+        "image": "redis:6.2-alpine",
+        "running": true
+      },
+      {
+        "name": "/cube-proxy",
+        "image": "cube-proxy:one-click",
+        "running": true
+      },
+      {
+        "name": "/cube-webui",
+        "image": "cube-sandbox-image.tencentcloudcr.com/opensource/openresty:1.21.4.1-6-alpine-fat",
+        "running": true
+      },
+      {
+        "name": "/cube-sandbox-mysql",
+        "image": "cube-sandbox-image.tencentcloudcr.com/opensource/mysql:8.0",
+        "running": true
+      },
+      {
+        "name": "/cube-egress",
+        "image": "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress:v0.4.0",
+        "running": false
+      },
+      {
+        "name": "/cube-sandbox-redis",
+        "image": "cube-sandbox-image.tencentcloudcr.com/opensource/redis:7-alpine",
+        "running": true
+      },
+      {
+        "name": "/cube-proxy-coredns",
+        "image": "cube-sandbox-image.tencentcloudcr.com/opensource/coredns/coredns:1.14.2",
+        "running": true
+      },
+      {
+        "name": "/petmatch-admin-dev-db",
+        "image": "postgres:17-alpine",
+        "running": false
+      },
+      {
+        "name": "/petmatch-postgres-test",
+        "image": "postgres:16",
+        "running": false
+      },
+      {
+        "name": "/open-design",
+        "image": "ghcr.io/nexu-io/od:latest",
+        "running": true
+      },
+      {
+        "name": "/ai-opcc-rustfs-1",
+        "image": "rustfs/rustfs:1.0.0-beta.11@sha256:84ce557a0245a06a9aae5516f55ee0f007fca78d41df356f419306fdc0cb168c",
+        "running": true
+      },
+      {
+        "name": "/ai-opcc-postgres-1",
+        "image": "postgres:18-alpine",
+        "running": false
+      },
+      {
+        "name": "/carbon-check-taskiq-admin",
+        "image": "ghcr.io/taskiq-python/taskiq-admin:latest",
+        "running": true
+      },
+      {
+        "name": "/carbon-check-pgbouncer",
+        "image": "edoburu/pgbouncer:latest",
+        "running": true
+      },
+      {
+        "name": "/carbon-check-redis",
+        "image": "redis:7-alpine",
+        "running": true
+      },
+      {
+        "name": "/carbon-check-postgres",
+        "image": "pgvector/pgvector:pg18-bookworm",
+        "running": true
+      },
+      {
+        "name": "/carbon-check-gotenberg",
+        "image": "gotenberg/gotenberg:8",
+        "running": true
+      },
+      {
+        "name": "/carbon-check-pandoc",
+        "image": "carbon-check-pandoc:latest",
+        "running": true
+      },
+      {
+        "name": "/carbon-check-minio",
+        "image": "minio/minio:latest",
+        "running": true
+      }
+    ]
+  }
+}

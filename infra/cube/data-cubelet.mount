@@ -1,0 +1,12 @@
+[Unit]
+Description=Cubelet XFS storage
+Before=cube-sandbox-cubelet.service cube-sandbox-network-agent.service
+
+[Mount]
+What=/var/lib/cubesandbox/cubelet-xfs.img
+Where=/data/cubelet
+Type=xfs
+Options=loop,noatime
+
+[Install]
+WantedBy=local-fs.target

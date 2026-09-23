@@ -1,0 +1,340 @@
+{
+  "at": "2026-09-23T08:47:47.195Z",
+  "runID": "erp-agent-cube-bench-e7618602-ab7a-4161-ae7d-d2457bc4fab1",
+  "templateID": "tpl-erp-agent-base-20260921",
+  "levels": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "repetitions": 3,
+  "rounds": [
+    {
+      "level": 1,
+      "repeat": 1,
+      "elapsedMs": 928,
+      "instancesSeen": 1,
+      "ready": 1,
+      "createsMs": [
+        62.1
+      ],
+      "readyMs": [
+        84
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 40017,
+        "SwapFree": 46124
+      },
+      "releaseMs": 839,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 1,
+      "repeat": 2,
+      "elapsedMs": 885.2,
+      "instancesSeen": 1,
+      "ready": 1,
+      "createsMs": [
+        56
+      ],
+      "readyMs": [
+        58.6
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 40007,
+        "SwapFree": 46126
+      },
+      "releaseMs": 824,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 1,
+      "repeat": 3,
+      "elapsedMs": 895.9,
+      "instancesSeen": 1,
+      "ready": 1,
+      "createsMs": [
+        62.7
+      ],
+      "readyMs": [
+        65.7
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39956,
+        "SwapFree": 46126
+      },
+      "releaseMs": 828.1,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 2,
+      "repeat": 1,
+      "elapsedMs": 927.9,
+      "instancesSeen": 2,
+      "ready": 2,
+      "createsMs": [
+        75.5,
+        77.1
+      ],
+      "readyMs": [
+        79.3,
+        87.9
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39919,
+        "SwapFree": 46127
+      },
+      "releaseMs": 836,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 2,
+      "repeat": 2,
+      "elapsedMs": 893.4,
+      "instancesSeen": 2,
+      "ready": 2,
+      "createsMs": [
+        62.1,
+        59
+      ],
+      "readyMs": [
+        64.1,
+        61.6
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39958,
+        "SwapFree": 46127
+      },
+      "releaseMs": 826.3,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 2,
+      "repeat": 3,
+      "elapsedMs": 936.1,
+      "instancesSeen": 2,
+      "ready": 2,
+      "createsMs": [
+        75,
+        75
+      ],
+      "readyMs": [
+        81.6,
+        80.9
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39974,
+        "SwapFree": 46127
+      },
+      "releaseMs": 849.9,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 4,
+      "repeat": 1,
+      "elapsedMs": 905.8,
+      "instancesSeen": 4,
+      "ready": 4,
+      "createsMs": [
+        56.7,
+        55.8,
+        56.2,
+        56.5
+      ],
+      "readyMs": [
+        59.7,
+        58.7,
+        66.7,
+        67.7
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39923,
+        "SwapFree": 46127
+      },
+      "releaseMs": 834.6,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 4,
+      "repeat": 2,
+      "elapsedMs": 899.9,
+      "instancesSeen": 4,
+      "ready": 4,
+      "createsMs": [
+        59.5,
+        61,
+        61.2,
+        61.3
+      ],
+      "readyMs": [
+        63.9,
+        64.6,
+        64.3,
+        64.6
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39848,
+        "SwapFree": 46128
+      },
+      "releaseMs": 831.4,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 4,
+      "repeat": 3,
+      "elapsedMs": 952.3,
+      "instancesSeen": 4,
+      "ready": 4,
+      "createsMs": [
+        76.3,
+        76.8,
+        76.9,
+        77.2
+      ],
+      "readyMs": [
+        80.1,
+        80.3,
+        80.4,
+        82.6
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39848,
+        "SwapFree": 46128
+      },
+      "releaseMs": 864.6,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 8,
+      "repeat": 1,
+      "elapsedMs": 953.6,
+      "instancesSeen": 8,
+      "ready": 8,
+      "createsMs": [
+        78.6,
+        79.6,
+        76.5,
+        75.2,
+        78.8,
+        79.6,
+        77.9,
+        80.5
+      ],
+      "readyMs": [
+        82.2,
+        92.3,
+        80.5,
+        78.8,
+        83.5,
+        91.6,
+        81,
+        83.4
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39789,
+        "SwapFree": 46129
+      },
+      "releaseMs": 857.6,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 8,
+      "repeat": 2,
+      "elapsedMs": 1010.8,
+      "instancesSeen": 8,
+      "ready": 8,
+      "createsMs": [
+        82.5,
+        82.6,
+        78.2,
+        78.6,
+        75.7,
+        82.2,
+        78.8,
+        78.2
+      ],
+      "readyMs": [
+        85,
+        86,
+        81.9,
+        81.9,
+        79.3,
+        85.1,
+        86,
+        81.8
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39775,
+        "SwapFree": 46130
+      },
+      "releaseMs": 916.8,
+      "remaining": 0,
+      "errors": []
+    },
+    {
+      "level": 8,
+      "repeat": 3,
+      "elapsedMs": 974.6,
+      "instancesSeen": 8,
+      "ready": 8,
+      "createsMs": [
+        68.5,
+        68,
+        67.1,
+        67.2,
+        68,
+        66.3,
+        63.6,
+        66.4
+      ],
+      "readyMs": [
+        81.7,
+        71.9,
+        70.2,
+        69.9,
+        70.9,
+        68.8,
+        67.6,
+        69.1
+      ],
+      "memoryAtPeakMiB": {
+        "MemAvailable": 39722,
+        "SwapFree": 46131
+      },
+      "releaseMs": 850,
+      "remaining": 0,
+      "errors": []
+    }
+  ],
+  "node": {
+    "hostIP": "192.168.100.122",
+    "quotaCpu": 48000,
+    "quotaMemMB": 79652,
+    "maxMvmSlots": 155,
+    "templateSpec": "cpu=2000m,mem=2000Mi"
+  },
+  "hostMemoryBeforeMiB": {
+    "MemAvailable": 40037,
+    "SwapFree": 46124
+  },
+  "finalCleanup": {
+    "releaseMs": 4.4,
+    "remaining": 0,
+    "errors": []
+  },
+  "hostMemoryAfterMiB": {
+    "MemAvailable": 39807,
+    "SwapFree": 46131
+  }
+}

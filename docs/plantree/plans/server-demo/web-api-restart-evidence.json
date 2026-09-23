@@ -1,0 +1,44 @@
+{
+  "caseId": "a324c76a-3344-422b-816e-589a9ce612b6",
+  "sessionId": "session_8451ba1f13b94438bc53abef51efe8bb",
+  "messages": [
+    "2"
+  ],
+  "operation": {
+    "id": "843ccc79-822b-4dd3-988c-92e6b4ab93f5",
+    "session_id": "session_8451ba1f13b94438bc53abef51efe8bb",
+    "sandbox_id": "b50e86aa6e144ff2a03307e39a49605f",
+    "state": "provisioned",
+    "provider_state": "running",
+    "guest_ready": true,
+    "error_code": null,
+    "created_at": "2026-09-21T16:03:49.016Z",
+    "expires_at": "2026-09-21T16:18:49.016Z",
+    "checked_at": "2026-09-21T16:03:49.110Z"
+  },
+  "after": {
+    "id": "843ccc79-822b-4dd3-988c-92e6b4ab93f5",
+    "session_id": "session_8451ba1f13b94438bc53abef51efe8bb",
+    "sandbox_id": "b50e86aa6e144ff2a03307e39a49605f",
+    "state": "provisioned",
+    "provider_state": "running",
+    "guest_ready": true,
+    "error_code": null,
+    "created_at": "2026-09-21T16:03:49.016Z",
+    "expires_at": "2026-09-21T16:18:49.016Z",
+    "checked_at": "2026-09-21T16:07:31.620Z"
+  },
+  "released": {
+    "id": "843ccc79-822b-4dd3-988c-92e6b4ab93f5",
+    "session_id": "session_8451ba1f13b94438bc53abef51efe8bb",
+    "sandbox_id": "b50e86aa6e144ff2a03307e39a49605f",
+    "state": "released",
+    "provider_state": null,
+    "guest_ready": false,
+    "error_code": null,
+    "created_at": "2026-09-21T16:03:49.016Z",
+    "expires_at": "2026-09-21T16:18:49.016Z",
+    "checked_at": "2026-09-21T16:07:31.709Z"
+  },
+  "passed": true
+}

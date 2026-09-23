@@ -1,0 +1,38 @@
+{
+  "name": "erp-agent",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/contracts", "apps/web"],
+  "engines": { "node": ">=22.13.0" },
+  "scripts": {
+    "dev:init": "node scripts/dev-init.mjs",
+    "db:up": "docker compose --env-file .env -f infra/compose.yaml up -d --wait postgres",
+    "db:down": "docker compose --env-file .env -f infra/compose.yaml down",
+    "db:migrate": "cargo run --locked --manifest-path services/api/Cargo.toml -- migrate",
+    "db:seed": "cargo run --locked --manifest-path services/api/Cargo.toml -- seed",
+    "storage:up": "docker compose --env-file .env -f infra/compose.yaml up -d --wait rustfs",
+    "storage:init": "cargo run --locked --manifest-path services/api/Cargo.toml -- storage-init",
+    "dev:api": "cargo run --locked --manifest-path services/api/Cargo.toml",
+    "dev:worker": "cargo run --locked --manifest-path services/api/Cargo.toml -- worker",
+    "agent:build": "cargo build --locked --manifest-path services/runtime-bridge/Cargo.toml -j 6",
+    "mcp:build": "cargo build --locked --manifest-path services/mcp-gateway/Cargo.toml -j 6",
+    "erp:setup": "node --env-file=.env scripts/setup-erp-demo.mjs",
+    "agent:test": "cargo test --locked --manifest-path services/runtime-bridge/Cargo.toml -j 6",
+    "api:test": "cargo test --locked --manifest-path services/api/Cargo.toml -j 6",
+    "agent:test:recovery": "cargo build --locked --manifest-path services/runtime-bridge/Cargo.toml --example stream-recovery-probe -j 6 && node --env-file=.env scripts/test-stream-recovery.mjs",
+    "parser:test": "cargo test --locked --manifest-path services/ingestion-worker/Cargo.toml",
+    "build": "cargo build --locked --manifest-path services/api/Cargo.toml -j 6",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
+    "test": "npm run api:test && npm run build && npm run mcp:build && node --env-file=.env tests/system/test-rust-api.mjs",
+    "check": "npm run typecheck && npm run test && npm run build:web",
+    "upstream:check": "node scripts/upstream.mjs",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build:web": "npm run build --workspace apps/web",
+    "preview:build": "npm run build:web && node scripts/build-web-preview.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "pg": "8.23.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,29 @@
+[package]
+name = "erp-agent-runtime"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+jcode-app-core = { path = "../../external/jcode/crates/jcode-app-core", default-features = false }
+jcode-provider-openai-runtime = { path = "../../external/jcode/crates/jcode-provider-openai-runtime" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync", "time", "signal"] }
+
+[build-dependencies]
+serde_json = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
+futures = "0.3"
+
+[profile.dev]
+debug = 0

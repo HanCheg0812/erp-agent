@@ -1,0 +1,3 @@
+[submodule "external/jcode"]
+	path = external/jcode
+	url = https://github.com/HanCheg0812/erp-agent-jcode.git
