@@ -29,11 +29,18 @@ revision, review its changes, run the runtime/permission/recovery tests, then co
 the new submodule pointer in the parent repository. Do not overwrite local JCode
 changes or let separate application instances update their source at runtime.
 
-The maintained fork is `origin` and the original repository is `upstream` in
-the local JCode checkout. Review and merge upstream changes into an integration
-branch on the fork, test them, publish the fork revision, then update the parent
-repository's pinned submodule commit. No pull request to the upstream repository
-is part of this workflow.
+The maintained fork is `origin`. In a fresh checkout, add the original repository
+as a read-only update source:
+
+```sh
+git -C external/jcode remote add upstream https://github.com/1jehuang/jcode.git
+git -C external/jcode remote set-url --push upstream DISABLED
+```
+
+Review and merge upstream changes into an integration branch on the fork, test
+them, publish the fork revision, then update the parent repository's pinned
+submodule commit. No pull request to the upstream repository is part of this
+workflow.
 
 OpenViking and Cube remain independent services. Their deployment configuration and
 compatibility records belong in `infra/`; vendoring their full source is unnecessary
