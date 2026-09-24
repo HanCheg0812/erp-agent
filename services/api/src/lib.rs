@@ -3,6 +3,7 @@ mod auth;
 mod cases;
 mod conversation;
 mod integrations;
+mod mcp_sessions;
 mod objects;
 mod permissions;
 mod platform;
@@ -55,6 +56,11 @@ pub fn router(app: App) -> Router {
             post(conversation::cancel),
         )
         .route("/cases/{id}/agent-sessions", post(agent_sessions::create))
+        .route("/mcp-sessions", post(mcp_sessions::create_route))
+        .route(
+            "/mcp-sessions/{id}",
+            axum::routing::delete(mcp_sessions::revoke_route),
+        )
         .route(
             "/agent-sessions/{id}/claim",
             post(agent_sessions::claim_route),
@@ -115,6 +121,10 @@ pub fn router(app: App) -> Router {
         )
         .route(
             "/internal/agent-sessions/{id}/tools",
+            post(integrations::call),
+        )
+        .route(
+            "/internal/mcp-sessions/{id}/tools",
             post(integrations::call),
         )
         .route(

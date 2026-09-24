@@ -1,4 +1,4 @@
-use crate::{agent_sessions, auth::Principal, cases, objects, platform::*};
+use crate::{agent_sessions, auth::Principal, cases, mcp_sessions, objects, platform::*};
 use anyhow::{Context, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
@@ -249,6 +249,7 @@ async fn turn(
     let claim = agent_sessions::claim(db, &actor, session).await?;
     let memories = objects::memories(db, &actor).await?;
     let token = claim["storage_token"].as_str().unwrap();
+    let (mcp_session, mcp_token) = mcp_sessions::insert(db, &actor, Some(id), Some(mid)).await?;
     let base = env("DEEPSEEK_BASE_URL", "https://api.deepseek.com");
     let settings: crate::integrations::Settings = serde_json::from_value(row["settings"].clone())?;
     settings.validate()?;
@@ -379,6 +380,8 @@ async fn turn(
             ("JCODE_SESSION_STORE_URL", &origin),
             ("JCODE_SESSION_STORE_ID", session),
             ("JCODE_SESSION_STORE_TOKEN", token),
+            ("JCODE_MCP_SESSION_ID", &mcp_session),
+            ("JCODE_MCP_SESSION_TOKEN", &mcp_token),
         ])
         .env("HOME", home)
         .env("AGENT_MCP_BINARY", gateway)
@@ -671,6 +674,7 @@ async fn process_candidate(
             if db.execute("UPDATE agent_runs SET state='running',started_at=now(),updated_at=now() WHERE message_id=$1 AND state='queued' AND NOT cancel_requested",&[&id]).await?==0{return Ok(());}
             let mut reply=if row["resumable"]==true { Reply { text:row["text"].as_str().unwrap_or("").into(), tools:serde_json::from_value(row["tools"].clone())?,steps:serde_json::from_value(row["steps"].clone())?,compactions:serde_json::from_value(row["compactions"].clone())?,context_usage:row.get("context_usage").filter(|value| !value.is_null()).cloned(),boundary:true,suspended:false } } else { Reply::default() };
             let result=turn(app,&db,&row,&mut reply,stop).await;
+            db.execute("UPDATE mcp_sessions SET revoked_at=now(),updated_at=now() WHERE run_message_id=$1 AND revoked_at IS NULL", &[&id]).await?;
             let recoverable = stop.is_cancelled() && db.query_one("SELECT resumable FROM agent_runs WHERE message_id=$1", &[&id]).await?.get::<_,bool>(0);
             if let Err(error)=&result {if !recoverable {eprintln!("Agent run {id} failed: {error:#}");reply.close("failed");for t in &mut reply.tools{if t["state"]=="running"{t["state"]=json!("failed")}}}}
             reply.save(&db,id).await?;

@@ -257,6 +257,15 @@ try {
   assert(listedOrders.trace_id);
   assert(erpRequests > beforeRejectedErpCalls);
   assert(erpAuthHeaders.includes('token forge-reader-token'));
+  const standaloneMcp = await api('/mcp-sessions', { token: a, method: 'POST', body: {}, status: 201 });
+  assert.equal(standaloneMcp.case_id, null);
+  const standalonePath = `/internal/mcp-sessions/${standaloneMcp.id}/tools`;
+  await api(standalonePath, { token: a, method: 'POST', body: toolCall, status: 401 });
+  const standaloneListed = await api(standalonePath, { token: standaloneMcp.capability, method: 'POST', body: toolCall });
+  assert.equal(standaloneListed.data.orders.length, 1);
+  assert.equal(standaloneListed.data.orders[0].customer, 'SYNTHETIC');
+  await api(`/mcp-sessions/${standaloneMcp.id}`, { token: a, method: 'DELETE' });
+  await api(standalonePath, { token: standaloneMcp.capability, method: 'POST', body: toolCall, status: 401 });
   const secondCase = await api('/cases', { token: c, method: 'POST', body: { ...create, title: 'Limited ERP identity', customer_code: 'OTHER' }, status: 201 });
   const secondMessage = await api(`/cases/${secondCase.id}/conversation/messages`, { token: c, method: 'POST', body: { client_message_id: randomUUID(), text: 'Read ERP with limited identity' }, status: 201 });
   const secondHistory = await api(`/cases/${secondCase.id}/conversation`, { token: c });
@@ -296,7 +305,7 @@ try {
   await db.query('DELETE FROM agent_runs WHERE message_id=$1',[message.message.id]);
   await api(`/cases/${id}/conversation/messages`,{token:a,method:'POST',body:{...messageInput,settings:{approval:'ask',model:'deepseek-flash',effort:'low'}},status:409});
   await api(`/cases/${id}/conversation/messages`,{token:a,method:'POST',body:{client_message_id:randomUUID(),text:'invalid',settings:{approval:'invalid',model:'deepseek-flash',effort:'high'}},status:400});
-  note('MCP scoped token, active run, explicit grants, ERP customer/part fields, knowledge path isolation, reads available in all approval modes');
+  note('MCP scoped and standalone capabilities, active run, explicit grants, ERP customer/part fields, knowledge path isolation, reads available in all approval modes');
   await api(`/internal/agent-sessions/${sid}`, { token: claim.storage_token, status: 401 });
   const uploaded = await testOriginalBoundaries({ api, db, actor, token: a, otherTokens: [b,c], caseId: id, control: originals.control });
   note('original upload retries, failure recovery, hash verification and owner isolation with controlled S3 fixture');
@@ -467,7 +476,7 @@ try {
   await api(decisionPath,{token:c,method:'POST',body:decision,status:404});
   await api(decisionPath,{token:a,method:'POST',body:{...decision,arguments_digest:'changed'},status:409});
   await Promise.all([0,1].map(()=>api(decisionPath,{token:a,method:'POST',body:decision})));
-  let result=await finished(approvalCase.id,actionMid);assert.equal(result.state,'completed');assert.equal(result.text,'saved');assert.equal(result.permissions[0].state,'executed');assert.equal(await memoryCount('Prefer metric units.'),1);
+  let result=await finished(approvalCase.id,actionMid);assert.equal(result.state,'completed',JSON.stringify(result));assert.equal(result.text,'saved');assert.equal(result.permissions[0].state,'executed');assert.equal(await memoryCount('Prefer metric units.'),1);
   assert.equal(result.tools.length,1);assert.equal(result.tools[0].state,'completed');
   await api(decisionPath,{token:a,method:'POST',body:decision});
   await api(decisionPath,{token:a,method:'POST',body:{...decision,decision:'denied'},status:409});

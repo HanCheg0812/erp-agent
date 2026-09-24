@@ -53,7 +53,12 @@ impl Tool for BusinessTool {
 }
 pub async fn connect() -> Result<Vec<(String, Arc<dyn Tool>)>> {
     let binary = std::env::var("AGENT_MCP_BINARY")?;
-    let env = json!({"OPENAI_API_KEY":"", "JCODE_SESSION_STORE_URL":std::env::var("JCODE_SESSION_STORE_URL")?, "JCODE_SESSION_STORE_ID":std::env::var("JCODE_SESSION_STORE_ID")?, "JCODE_SESSION_STORE_TOKEN":std::env::var("JCODE_SESSION_STORE_TOKEN")?});
+    let env = json!({
+        "OPENAI_API_KEY":"",
+        "JCODE_SESSION_STORE_URL":std::env::var("JCODE_SESSION_STORE_URL")?,
+        "JCODE_SESSION_STORE_ID":std::env::var("JCODE_MCP_SESSION_ID").or_else(|_| std::env::var("JCODE_SESSION_STORE_ID"))?,
+        "JCODE_SESSION_STORE_TOKEN":std::env::var("JCODE_MCP_SESSION_TOKEN").or_else(|_| std::env::var("JCODE_SESSION_STORE_TOKEN"))?,
+    });
     let config: McpConfig = serde_json::from_value(json!({"servers":{
         "erp":{"command":binary,"args":["erp"],"shared":false,"env":env},
         "openviking":{"command":binary,"args":["openviking"],"shared":false,"env":env}

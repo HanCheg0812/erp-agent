@@ -20,11 +20,11 @@ Web Agent Chat 与灰白视觉的实现、验证及边界见 [Web 会话记录](
 
 按 [Skill 发现与 ERP/知识工具组合](skill-tool-design.md)接入四份版本化指引和受控发现/加载工具，真实模型与 API 重启验证通过；[可替换解析流水线](parser-pipeline-design.md)的 Rust trait、配置继承、阶段依赖与结果标识已实现并通过 fixture 测试。真实解析后端和 Worker 尚未接入，具体证据与 DeepSeek 连续工具调用修复见 [Skill/解析基础联调](skill-parser-integration.md)。
 
-目标：以真实运行的 ERPNext 和合成资料，演示客户需求变更、影响分析、人工确认、受控写入及执行跟踪。当前先完成 ERP MCP 的身份、工具授权和读取边界；共享演示身份不代表个人 ERPNext 权限验收。
+目标：以真实运行的 ERPNext 和合成资料，演示客户需求变更、影响分析、人工确认、受控写入及执行跟踪。ERP MCP 的身份、工具授权、读取边界和短期 capability 已在本地合成 ERP 与真实双用户只读链路中验证；共享演示身份不代表个人 ERPNext 权限验收，写入仍关闭。
 
 阅读顺序：[决策](decisions.md) → [路线图](roadmap.md) → [待确认信息](open-questions.md)。详细设计见 [架构](../../../architecture/erp-agent-demo-architecture.md)，模型行为见 [Prompt 草案](../../../../prompts/erp-agent-system-prompt.md)。
 
-当前新增身份与权限设计：[ERP MCP 与 EBAC](erp-mcp-ebac.md)，以及配套的[ERP MCP 工具目录](erp-mcp-tools.md)。身份权限先于 ERP 写入实现；当前 ERP 只读工具已接入工具级 EBAC，并通过 `erp_connections` / `erp_identity_bindings` 绑定演示用户的个人凭据引用，正式凭据服务和 ERPNext 原生权限交集仍待验收。下一阶段按[ERP MCP 下一阶段设计](erp-mcp-next-phase.md)推进只读生产化、业务推演和受控写入。
+当前新增身份与权限设计：[ERP MCP 与 EBAC](erp-mcp-ebac.md)，以及配套的[ERP MCP 工具目录](erp-mcp-tools.md)。身份权限先于 ERP 写入实现；当前 ERP 只读工具已接入工具级 EBAC，支持无任务/任务绑定 MCP capability，并通过 `erp_connections` / `erp_identity_bindings` 绑定演示用户的个人凭据引用。正式凭据服务、目标生产 ERPNext 复核和受控写入仍待验收。下一阶段按[ERP MCP 下一阶段设计](erp-mcp-next-phase.md)推进只读生产化、业务推演和受控写入。
 
 业务基础已实现：分域 API、PostgreSQL、身份、案件、方案版本、审批幂等、事务审计、Web 对话保存与 Cube 实例生命周期。JCode 源码已固定引入，其 PostgreSQL 存储补丁在真实模型循环与主机进程重启中通过验证。Cube 内外两种方案的[调研记录](../../../architecture/cube-runtime-placement.md)已落盘；OpenViking 真实检索、Cube 常驻 Harness 或生产部署验收仍未完成。
 

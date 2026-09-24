@@ -101,7 +101,14 @@ async fn main() -> anyhow::Result<()> {
     let session = std::env::var("JCODE_SESSION_STORE_ID")?;
     let gateway = Gateway {
         domain,
-        endpoint: format!("{origin}/internal/agent-sessions/{session}/tools"),
+        endpoint: format!(
+            "{origin}/internal/{}-sessions/{session}/tools",
+            if session.starts_with("mcp_") {
+                "mcp"
+            } else {
+                "agent"
+            }
+        ),
         token: std::env::var("JCODE_SESSION_STORE_TOKEN")?,
         http: reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(20))

@@ -335,6 +335,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "20260924110000_add_erp_identity_bindings",
         include_str!("../../migrations/20260924110000_add_erp_identity_bindings.sql"),
     ),
+    (
+        "20260924120000_create_mcp_sessions",
+        include_str!("../../migrations/20260924120000_create_mcp_sessions.sql"),
+    ),
 ];
 const LEGACY_MIGRATION_IDS: &[(&str, &str)] = &[
     ("001_auth", "20260921171235_create_auth_schema"),

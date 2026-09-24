@@ -1,5 +1,7 @@
 # Implementation Status
 
+2026-09-24 ERP MCP capability session boundary：新增 PostgreSQL `mcp_sessions`，支持 planner 创建无业务任务的短期 capability，也支持 Worker 为单次运行创建任务绑定 capability；网关按 capability 前缀路由，调用时重新执行 EBAC、全局/任务范围、平台用户 ERPNext 绑定和 ERP 结果校验。恢复运行会撤销旧 capability 后重新申请，主动撤销和 15 分钟过期均拒绝后续调用。隔离系统 fixture 已验证无案件创建、ERP 读取、撤销后 401，以及原有任务范围、ERPNext 403 和 Agent guidance；未执行 ERP 写入。
+
 2026-09-24 ERP MCP Phase A 真实双用户权限交集：在本地 ERPNext v16.35.0 真实 HTTP API 上，用 `planner@example.test -> forge-reader@example.test` 和同租户 `erp-boundary-limited@example.test -> limited-reader@example.test` 完成只读联调。forge 通过 Amazon + `SH-04-GREY-XL` 读到 `SAL-ORD-2026-00003`；limited 通过 Temu + `SH-04-GREY-L` 仅读到 `SAL-ORD-2026-00001`，列表/明细均返回统一 envelope，审计中的 `erp_user` 与 `trace_id` 可对应。limited 读取 Shopee `SAL-ORD-2026-00002` 时 ERPNext 原生 403 被转为 `erp_forbidden`（`retryable=false`、`safe_next_step=ask_erp_admin`）；平台显式 deny 返回 `platform_forbidden`；案件客户超出平台 grant 返回 `erp_scope_missing`。请求使用合成用户/订单，未执行 ERP 写入；正式 Vault/KMS provider、撤销/过期轮换、生产 ERPNext 尚未验收。可重复脚本见[真实 ERP 权限边界验证](../../../../scripts/validate-real-erp-boundary.mjs)。
 
 2026-09-24 ERP MCP Phase A 第一片：ERP `list_erp_orders` / `read_erp_order` 统一返回 `status`、`as_of`、`trace_id`、`sources`、`data`、`warnings` envelope；审计事件写入同一 `trace_id`，来源只保留 Sales Order 的公开标识与 `modified`，ERP 原始响应仍由适配器字段白名单裁剪。系统 fixture 已覆盖 envelope、来源和审计 trace 关联；API 53 项单元测试、3 项 HTTP 测试及完整 `npm run check` 通过。此项只覆盖 ERP 只读切片，OpenViking envelope、正式凭据 provider、撤销/过期轮换和生产 ERPNext 仍待下一步验收。

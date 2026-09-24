@@ -16,7 +16,7 @@
 
 当前数据库中的 `cases` 是历史命名。业务语义按“业务任务 / 变更事项”理解；它可关联一张或多张 ERPNext 单据，但不向 ERPNext 新增案件模型。后续可通过 API 展示名、事件名和新表名逐步迁移，暂不为了改名破坏已有会话和审计数据。
 
-实现进度：`integration_grants` 已支持工具、动作、资源类型、效果、策略版本和有效状态；MCP API 入口已对当前四个只读工具执行工具级 EBAC，并保留旧 grant 的受限兼容读取。`erp_connections` 与 `erp_identity_bindings` 已实现按租户绑定平台用户和 ERPNext 用户；`bound_user` 已通过受限环境凭据 provider 读取 `ERP_CREDENTIAL_*`，`shared_demo` 仍需显式本地配置，ERPNext 原生权限交集和正式密钥服务仍待实现。
+实现进度：`integration_grants` 已支持工具、动作、资源类型、效果、策略版本和有效状态；MCP API 入口已对当前四个只读工具执行工具级 EBAC，并保留旧 grant 的受限兼容读取。`erp_connections` 与 `erp_identity_bindings` 已实现按租户绑定平台用户和 ERPNext 用户；`bound_user` 已通过受限环境凭据 provider 读取 `ERP_CREDENTIAL_*`，本地真实双用户 ERPNext 权限交集已验证，`shared_demo` 仍需显式本地配置。正式密钥服务、目标 ERPNext 版本复核和写入验收仍待实现。
 
 ## 2. 双边权限的判定
 
@@ -64,13 +64,13 @@ ERP MCP 是受控的业务工具网关，不是把 Frappe REST API 原样暴露�
 
 ### 连接和认证
 
-1. Agent Runtime 为一次业务任务运行建立一个 stdio MCP 连接；同一运行的多次工具调用复用它。
-2. Runtime Bridge 向网关传递一次性或短期的 Agent session capability。它只证明“哪个任务的哪个运行正在调用”，不直接代表 ERPNext 用户。
-3. 网关把调用转发到 Rust API。API 校验 session、租户、平台用户、业务任务、运行状态和 EBAC。
+1. Agent Runtime 为一次业务任务运行建立一个 stdio MCP 连接；同一运行的多次工具调用复用它。独立的服务调用方也可以先通过平台 API 创建无任务 MCP capability。
+2. Runtime Bridge 向网关传递短期的 MCP capability。运行 capability 绑定任务和 `run_message_id`；独立 capability 不绑定任务，只能使用全局 grant。两者都只证明哪个平台用户正在调用，不直接代表 ERPNext 用户。
+3. 网关把调用转发到 Rust API。API 校验 capability、租户、平台用户、可选业务任务、运行状态和 EBAC。
 4. API 的 ERP 适配器根据映射取得后台凭据，并以对应 ERPNext 用户调用 ERPNext。凭据不下发给模型或 MCP 子进程。
 5. 适配器记录平台判定、ERP 身份、ERPNext 响应和最终业务结果；拒绝时区分平台拒绝与 ERPNext 拒绝，但不泄露未授权记录的存在性。
 
-MCP session 的生命周期与 Runtime/运行绑定，不按每次工具调用创建，也不作为权限缓存。权限和凭据变化后，下一次 API 调用重新检查；撤销或运行结束时，短期 capability 立即失效。
+MCP session 的生命周期与 Runtime/运行绑定，不按每次工具调用创建，也不作为权限缓存。公开创建的独立 capability 默认 15 分钟有效，运行 capability 在运行结束、撤销或过期后失效；恢复运行会撤销旧 capability 并申请新的 capability。权限和凭据变化后，下一次 API 调用重新检查。
 
 ### 工具分层
 

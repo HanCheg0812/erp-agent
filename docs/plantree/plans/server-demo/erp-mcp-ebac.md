@@ -1,10 +1,12 @@
 # ERP MCP 与 EBAC
 
-状态：In Progress。工具级 EBAC、ERP 连接、平台用户到 ERPNext 用户绑定和本地个人凭据提供器已实现；ERPNext 原生权限交集和正式密钥服务仍未完成。
+状态：In Progress。ERP MCP 的身份、短期能力会话、工具级 EBAC、ERP 连接和平台用户到 ERPNext 用户绑定已实现并通过本地合成 ERP 验证；真实 ERPNext 原生权限交集、正式密钥服务和写入工具仍未完成。
 
 已落地的第一步：`integration_grants` 增加 `tool_id`、`action`、`resource_type`、`effect`、`policy_revision` 和 `active`；Rust MCP 调用入口先按具体工具执行 allow/deny 判定，再把允许的 scope 交给 ERP/OpenViking 适配器。旧的无 `tool_id` grant 只兼容当前已发布的四个只读工具，不能授权未来工具或写入动作；显式 deny 优先。
 
-当前已增加 `erp_connections` 和 `erp_identity_bindings`。演示初始化会把平台用户绑定到明确的 `forge-reader@example.test`，以 `bound_user` 连接读取后台环境中的 `ERP_CREDENTIAL_FORGE_READER`；未绑定用户即使开启演示模式也不能调用 ERP。审计只记录 ERP 用户标识，不记录密钥。凭据引用仅允许 `ERP_CREDENTIAL_*` 环境变量，生产环境仍应替换为 Vault/KMS provider。Rust 单测和 `npm run check` 已通过。
+当前已增加 `erp_connections` 和 `erp_identity_bindings`。演示初始化会把平台用户绑定到明确的 `forge-reader@example.test`，以 `bound_user` 连接读取后台环境中的 `ERP_CREDENTIAL_FORGE_READER`；未绑定用户即使开启演示模式也不能调用 ERP。审计只记录 ERP 用户标识，不记录密钥。凭据引用仅允许 `ERP_CREDENTIAL_*` 环境变量，生产环境仍应替换为 Vault/KMS provider。
+
+MCP 能力会话位于 `mcp_sessions`：可由已认证的 planner 创建为独立的无任务会话，也可由 Worker 为一次运行创建并绑定任务。能力只有 15 分钟有效，支持主动撤销；每次调用仍重新检查平台 EBAC、任务/全局资源范围、平台用户的 ERPNext 绑定和 ERPNext 返回结果。无任务会话只能使用全局 grant，不会创建或隐式关联平台业务任务。
 
 ERP 权限拒绝已经有 Agent-facing 错误契约：API 在 `erp_forbidden`、`platform_forbidden`、范围拒绝、身份绑定和凭据配置错误中附加 `agent_guidance`，说明错误类别、是否可重试、安全的下一步和给 Agent 的处理指令；MCP 网关直接转发这份响应。权限拒绝不会提示 Agent 通过改变参数绕过，也不会让 Agent 向用户索要 ERP secret。
 
@@ -43,7 +45,7 @@ ERP 权限拒绝已经有 Agent-facing 错误契约：API 在 `erp_forbidden`、
 3. ERP 凭据存储位置和轮换方式；不得进入浏览器、模型或 Cube 镜像。当前 provider 只为本地联调读取 `ERP_CREDENTIAL_*`，生产需接入 Vault/KMS；`shared_demo` 仅允许显式本地联调配置。
 4. 业务任务关联 ERPNext 单据的字段、快照摘要和版本表示。
 5. 读取工具的首批 DocType/字段/过滤边界，以及写工具暂不注册的范围。
-6. 绑定唯一约束、凭据轮换/撤销语义，以及两个真实 `bound_user` 身份的 ERPNext 原生权限交集验收。
+6. 凭据轮换/撤销语义，以及两个真实 `bound_user` 身份的 ERPNext 原生权限交集验收。
 
 ## 验收门槛
 
