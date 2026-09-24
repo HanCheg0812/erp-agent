@@ -49,7 +49,7 @@ pub fn config() -> Value {
     json!({"endpoint":env("DEEPSEEK_BASE_URL","https://api.deepseek.com"),"api":"responses",
         "models":["deepseek-flash","deepseek-v4-pro"],"efforts":["none","low","high","max"],
         "context_windows":{"deepseek-flash":1048576,"deepseek-v4-pro":1048576},
-        "approval_modes":["ask","auto","full"],"integrations":{"erp":configured("ERP_API_TOKEN"),"openviking":configured("OPENVIKING_URL")}})
+        "approval_modes":["ask","auto","full"],"integrations":{"erp":erp_configured(),"openviking":configured("OPENVIKING_URL")}})
 }
 pub fn model_context_window(model: &str) -> Option<u64> {
     match model {
@@ -87,6 +87,12 @@ pub fn context_usage(model: &str, used_tokens: u64, compacting: bool) -> Value {
 }
 fn configured(key: &str) -> bool {
     std::env::var(key).is_ok_and(|v| !v.trim().is_empty())
+}
+
+fn erp_configured() -> bool {
+    configured("ERP_API_TOKEN")
+        || std::env::vars()
+            .any(|(key, value)| key.starts_with("ERP_CREDENTIAL_") && !value.trim().is_empty())
 }
 
 #[cfg(test)]

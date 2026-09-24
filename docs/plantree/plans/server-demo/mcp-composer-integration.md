@@ -6,7 +6,7 @@
 
 - Rust MCP 网关通过 JCode 原生 McpManager 注册 `erp`、`openviking` 两个 stdio 服务，合计四个领域工具。业务身份、用户/案件范围和服务凭据由 Rust API 检查与持有。
 - 真实模型依次完成 ERPNext 订单列表和订单明细读取；OpenViking 工具被实际调用，返回 `openviking_not_configured`。模型明确说明未检索知识库，未生成虚假证据。单次完整运行 10,121 ms，只是该次观察，不是性能基准。
-- ERPNext 使用专用只读服务账号，用户范围通过 PostgreSQL integration_grants 限定。当前演示账号有四个合成客户授权；新注册用户不会自动获得这些数据。
+- ERPNext 演示连接通过 `erp_connections` / `erp_identity_bindings` 绑定到明确的 `forge-reader@example.test`，以 `bound_user` 模式读取后台 `ERP_CREDENTIAL_FORGE_READER`；平台工具范围仍由 `integration_grants` 限定。当前链路证明了绑定用户凭据和工具授权，新注册用户不会自动获得这些数据，但两个不同 ERPNext 用户的原生权限交集仍未验收。
 - OpenViking 接口及根 URI 范围验证已实现，并有隔离 fixture 检查；真实服务、Embedding 和文档索引尚未配置。用户已确认 Embedding 可以随后配置。
 - 修复 DeepSeek Responses 连续工具调用中历史 reasoning item 顺序导致的 400；保留推理数据并放在对应 assistant 消息的正文/工具调用之前。真实列表、读取和检索工具循环通过，provider 26 项单元测试通过。
 - 新建会话直接进入空聊天，业务字段可稍后补充。模型端点、Flash/Pro、思考程度选择持久化到会话/消息/运行记录；恢复已有 JCode 会话后重新应用所选模型与思考程度。真实 Pro 无思考回复及切换 Flash/max 后停止均通过。

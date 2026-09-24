@@ -39,4 +39,12 @@
 31. 2026-09-23：按 Rust/Cargo 与 Axum 社区惯例，以服务为测试归属。API crate 增加 `src/lib.rs` 作为公开可测试服务入口，导出 `router(App)` 和生命周期；`src/main.rs` 仅委托 library。私有规则测试留在源码模块，服务级 Rust 集成测试放 `services/api/tests/`，共用支持代码放 `tests/support/mod.rs`，跨服务/多进程验收脚本迁到仓库级 `tests/system/`。第 28 条中 `main.rs` 组装路由的描述由本条更新。
 32. 2026-09-23：工具保留稳定的内部 ID 用于 JCode 调用、MCP 路由和审计；对话步骤与批准卡片显示简短的业务动作名称，例如“查看附件”“查看订单”“搜索业务资料”，不展示 `mcp__...` 前缀。新增工具若暂未配置展示名，界面使用通用动作标题，不能因此导致会话页崩溃。此约定参考 OpenCode 将工具 ID 与界面动作标题分开的做法。
 
+33. 2026-09-23：用户确认 ERPNext 原生用户/角色/单据权限与平台 EBAC 互通。EBAC（本项目暂定义为 Enterprise Business Access Control）只管平台用户是否能让 Agent 执行业务工具及其任务/资源范围；ERPNext 继续作为 ERP 单据权限来源。每次 ERP MCP 调用取两边权限交集。当前数据库中的 `cases` 仅作为兼容命名，业务语义改为业务任务/变更事项，不把 ERPNext 改造成案件或财务系统。详细设计见 [ERP MCP 与 EBAC](erp-mcp-ebac.md)。
+
+34. 2026-09-24：先落地工具级 EBAC，不引入完整平台角色同步。`integration_grants` 增加工具、动作、资源类型、效果、策略版本和有效状态；MCP API 入口执行具体工具的 allow/deny，显式 deny 优先。旧的无 `tool_id` grant 只兼容现有四个只读工具，不能开放未来工具或写入动作；平台用户到 ERPNext 用户绑定和 ERPNext 原生权限交集作为下一步。
+
+35. 2026-09-24：身份绑定按租户固定为平台用户到 ERPNext 用户的一对一有效绑定。新增 `erp_connections` 与 `erp_identity_bindings`；本地演示绑定 `forge-reader@example.test` 使用受限的 `ERP_CREDENTIAL_FORGE_READER` 环境凭据，`shared_demo` 仍需显式开关和明确绑定。生产仍需 Vault/KMS provider，两个不同 ERPNext 用户的原生权限交集尚未验收。
+
+36. 2026-09-24：ERP MCP 后续按三阶段推进：先完成正式凭据、MCP capability 生命周期和两个非管理员 ERPNext 用户的只读权限交集；再实现固定 DocType/字段边界的业务推演工具；最后以 proposal、审批、ERP 状态重检、幂等和对账为前置条件，选择一个草稿类写工具做端到端验收。写工具在此之前不注册给业务 Agent。详见 [ERP MCP 下一阶段设计](erp-mcp-next-phase.md)。
+
 实施选择：Rust API 已通过本地兼容性、隔离、重启和压缩检查并成为运行入口；React/TypeScript Web 保持，思考组件参考 Astryx ChatReasoning，正文使用 `@astryxdesign/core@0.6.2` 的 `useStreamingText`，保持灰白视觉。OpenViking 和 Cube 保留独立服务边界；真实知识检索、解析适配器和混合负载仍待验收。

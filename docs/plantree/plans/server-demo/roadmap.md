@@ -1,6 +1,6 @@
 # 路线图
 
-当前阶段：业务 Web/API、PostgreSQL、Cube 生命周期及 JCode/DeepSeek Responses 完成本地联调，ERP/知识工具待接入。
+当前阶段：业务 Web/API、PostgreSQL、Cube 生命周期及 JCode/DeepSeek Responses 完成本地联调。ERP MCP 已注册两个只读工具并通过真实 ERPNext 列表/明细读取；工具级 EBAC、ERP 连接、平台用户绑定、本地绑定用户凭据 provider、Agent 友好错误契约和真实双用户权限交集已接入，下一阶段按[ERP MCP 下一阶段设计](erp-mcp-next-phase.md)推进正式凭据生命周期、只读生产化、业务推演和受控写入。OpenViking MCP 工具已注册，服务/Embedding 仍未配置。
 
 ## Done
 
@@ -22,6 +22,8 @@
 
 ## In Progress
 
+身份与权限设计转为当前优先事项，见 [ERP MCP 与 EBAC](erp-mcp-ebac.md)。工具策略、连接/绑定、本地凭据 provider、ERP 只读结果 envelope 和真实双用户权限交集已落地；当前继续固定生产后台凭据边界、MCP capability 失效语义及撤销/过期轮换。
+
 当前授权的[Web/API/Cube 生命周期联调](web-api-integration.md)和[首轮真实模型联调](deepseek-integration.md)完成。JCode 当前在主机独立进程运行，尚未加入 Cube 模板。
 
 按用户最新重点推进 [OpenViking RAG 接入](rag-foundation.md)，覆盖扫描/表格与照片/图纸两类图片。原件上传/RustFS 下载已实现；[聊天附件进入 Agent 的契约](chat-attachment-agent-design.md)已设计，消息绑定、真实看图、解析和知识检索仍待实施。
@@ -30,11 +32,12 @@
 
 ## Next
 
-1. 按[聊天附件设计](chat-attachment-agent-design.md)绑定消息与已上传原件，验证 DeepSeek Flash/JCode 的真实图片回合；再按 [解析设计](parser-pipeline-design.md)实现真实 ParseBackend、统一产物、文档任务与 Rust Worker/网关，接 OpenViking，验证引用、版本隔离和失败恢复。
-2. 按[存储设计](../../../architecture/session-storage.md)补齐长上下文压缩与 Cube 重建恢复；建立 Cube 常驻 JCode/Bridge 模板，验证双会话隔离及暂停恢复，对照外部运行的延迟和资源。
-3. 固定相同解析产物和模型，对比基础向量检索与 OpenViking 的证据召回、引用准确性、拒答、延迟和成本，按错例改善 RAG。
-4. 补齐执行记录/ERP 对账契约，实现 ERPNext 合成数据和 ERP 业务工具，验证批准后重新检查 ERP 状态。
-5. 在业务 Web 接入 ERP 执行记录，完成正常/异常业务闭环和全链路混合负载测试；Cube 基础创建并发已测到 8 路，JCode/Bridge 多会话和稳态容量仍待测。
+1. 按 [ERP MCP 下一阶段设计](erp-mcp-next-phase.md) 将已完成的本地双用户只读验收推进到正式凭据 provider、MCP capability 失效/轮换和目标 ERPNext 版本复核；写工具继续关闭。
+2. 按[聊天附件设计](chat-attachment-agent-design.md)绑定消息与已上传原件，验证 DeepSeek Flash/JCode 的真实图片回合；再按 [解析设计](parser-pipeline-design.md)实现真实 ParseBackend、统一产物、文档任务与 Rust Worker/网关，接 OpenViking，验证引用、版本隔离和失败恢复。
+3. 按[存储设计](../../../architecture/session-storage.md)补齐长上下文压缩与 Cube 重建恢复；建立 Cube 常驻 JCode/Bridge 模板，验证双会话隔离及暂停恢复，对照外部运行的延迟和资源。
+4. 固定相同解析产物和模型，对比基础向量检索与 OpenViking 的证据召回、引用准确性、拒答、延迟和成本，按错例改善 RAG。
+5. 补齐 proposal、执行记录和 ERP 对账契约，实现 Phase B 的 ERP 业务推演工具；通过审批、状态重检和幂等验收后，才选择一个草稿类写工具进行端到端验证。
+6. 在业务 Web 接入 ERP 执行记录，完成正常/异常业务闭环和全链路混合负载测试；Cube 基础创建并发已测到 8 路，JCode/Bridge 多会话和稳态容量仍待测。
 
 ## Deferred
 

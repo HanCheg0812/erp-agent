@@ -1,3 +1,4 @@
+mod credentials;
 mod erp;
 mod gateway;
 mod handlers;

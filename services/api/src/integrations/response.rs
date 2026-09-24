@@ -31,6 +31,20 @@ pub(crate) async fn response_json(mut response: reqwest::Response) -> Result<Val
     })
 }
 
+pub(crate) async fn erp_response_json(response: reqwest::Response) -> Result<Value> {
+    if matches!(
+        response.status(),
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+    ) {
+        return Err(Error(
+            StatusCode::FORBIDDEN,
+            "erp_forbidden",
+            "ERPNext rejected the bound user's permission",
+        ));
+    }
+    response_json(response).await
+}
+
 pub(super) fn select(value: &Value, fields: &[&str]) -> Value {
     Value::Object(
         fields
@@ -82,6 +96,13 @@ mod tests {
                 .unwrap_err()
                 .1,
             "upstream_request_failed"
+        );
+        assert_eq!(
+            erp_response_json(response(403, b"{}".to_vec()).await)
+                .await
+                .unwrap_err()
+                .1,
+            "erp_forbidden"
         );
         assert_eq!(
             response_json(response(200, b"not-json".to_vec()).await)

@@ -774,7 +774,8 @@ pub async fn run(app: App, stop: Arc<tokio_util::sync::CancellationToken>, concu
                 Err(error) => eprintln!("Agent worker: {error}"),
             }
         }
-        if (check_backfill || queued_candidates) && tasks.len() < concurrency && backfill.is_none() {
+        if (check_backfill || queued_candidates) && tasks.len() < concurrency && backfill.is_none()
+        {
             backfill = Some(tokio::time::Instant::now() + Duration::from_millis(100));
         }
     }

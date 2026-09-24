@@ -13,12 +13,12 @@ impl Gateway {
             vec![
                 (
                     "list_erp_orders",
-                    "List current ERPNext sales orders within this user's backend-granted customer scope. No writes.",
+                    "List current ERPNext sales orders within this user's backend-granted customer scope. No writes. Success returns status, as_of, trace_id, sources, data.orders and warnings. Permission failures include agent_guidance; follow it and do not retry with altered arguments.",
                     json!({"type":"object","properties":{"limit":{"type":"integer","minimum":1,"maximum":20}},"additionalProperties":false}),
                 ),
                 (
                     "read_erp_order",
-                    "Read one current ERPNext sales order and line items. The backend enforces customer and case scope. No writes.",
+                    "Read one current ERPNext sales order and line items. The backend enforces customer and case scope. No writes. Success returns status, as_of, trace_id, sources, data.order and warnings. Permission failures include agent_guidance; follow it and do not infer hidden records.",
                     json!({"type":"object","properties":{"sales_order":{"type":"string","minLength":1,"maxLength":140}},"required":["sales_order"],"additionalProperties":false}),
                 ),
             ]

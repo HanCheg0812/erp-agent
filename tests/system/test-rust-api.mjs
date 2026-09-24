@@ -21,7 +21,7 @@ const name = `erp_rust_test_${randomBytes(8).toString('hex')}`;
 await admin.query(`CREATE DATABASE ${name}`);
 const url = new URL(process.env.DATABASE_URL); url.pathname = name;
 const db = new pg.Client({ connectionString: url.href }); await db.connect();
-let child; let second; let logs = ''; let creates = 0; let remote = null; let loseCreate = false; let uncertainDelete = false;
+let child; let second; let logs = ''; let creates = 0; let erpRequests = 0; const erpAuthHeaders = []; let remote = null; let loseCreate = false; let uncertainDelete = false;
 const originals = originalStorageFixture();
 const cube = createServer(async (req, res) => {
   const chunks = []; for await (const chunk of req) chunks.push(chunk);
@@ -35,14 +35,25 @@ const cube = createServer(async (req, res) => {
     return res.end(JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:text.includes('malformed')?'invalid':JSON.stringify({decision:text.includes('deny')?'denied':'allowed',reason:'Synthetic independent review'})}]}]}));
   }
   if (req.url.startsWith('/api/resource/')) {
-    assert.equal(req.headers.authorization, 'token synthetic-erp');
+    erpRequests++;
+    erpAuthHeaders.push(req.headers.authorization);
+    assert(['token synthetic-erp', 'token forge-reader-token', 'token limited-reader-token'].includes(req.headers.authorization));
     const customer = req.url.includes('OTHER') ? 'OTHER' : 'SYNTHETIC';
     if (req.url.includes('?')) {
       const query = new URL(req.url, 'http://fixture').searchParams;
-      assert.deepEqual(JSON.parse(query.get('filters'))[0], ['customer','in',['SYNTHETIC']]);
-      return res.end(JSON.stringify({ data:[{name:'SO-1',customer},{name:'SO-OTHER',customer:'OTHER'}] }));
+      const filters = JSON.parse(query.get('filters'))[0];
+      assert.deepEqual(filters, ['customer','in',[customer]]);
+      if (req.headers.authorization === 'token limited-reader-token' && customer === 'OTHER') {
+        res.statusCode = 403;
+        return res.end(JSON.stringify({ exc_type: 'PermissionError' }));
+      }
+      return res.end(JSON.stringify({ data:[{name:'SO-1',customer,modified:'2026-09-24T00:00:00Z'},{name:'SO-OTHER',customer:'OTHER',modified:'2026-09-24T00:00:00Z'}] }));
     }
-    return res.end(JSON.stringify({data:{name:'SO-1',customer,secret:'must-not-leak',items:[{item_code:'TEST-42',qty:3},{item_code:'OTHER',qty:7}]}}));
+    if (req.headers.authorization === 'token limited-reader-token' && customer === 'OTHER') {
+      res.statusCode = 403;
+      return res.end(JSON.stringify({ exc_type: 'PermissionError' }));
+    }
+    return res.end(JSON.stringify({data:{name:'SO-1',customer,modified:'2026-09-24T00:00:00Z',secret:'must-not-leak',items:[{item_code:'TEST-42',qty:3},{item_code:'OTHER',qty:7}]}}));
   }
   if (req.url === '/api/v1/search/find') {
     assert.deepEqual(JSON.parse(input).target_uri, ['viking://resources/test/user']);
@@ -68,7 +79,7 @@ const cube = createServer(async (req, res) => {
 cube.listen(0, '127.0.0.1'); await once(cube, 'listening');
 const listener = createServer(); listener.listen(0, '127.0.0.1'); await once(listener, 'listening'); const port = listener.address().port; await new Promise(resolve => listener.close(resolve));
 const origin = `http://127.0.0.1:${port}`;
-const env = { ...process.env, DATABASE_URL: url.href, API_PORT: String(port), DEEPSEEK_API_KEY: '', ERP_API_TOKEN:'synthetic-erp', ERP_API_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_API_KEY:'', CUBE_API_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_PROXY_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_TEMPLATE_ID: 'test' };
+const env = { ...process.env, DATABASE_URL: url.href, API_PORT: String(port), DEEPSEEK_API_KEY: '', ERP_API_TOKEN:'synthetic-erp', ERP_CREDENTIAL_FORGE_READER:'forge-reader-token', ERP_CREDENTIAL_LIMITED_READER:'limited-reader-token', ERP_API_URL:`http://127.0.0.1:${cube.address().port}`, ERP_SHARED_DEMO_MODE:'true', OPENVIKING_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_API_KEY:'', CUBE_API_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_PROXY_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_TEMPLATE_ID: 'test' };
 env.AGENT_MAX_CONCURRENT_RUNS = '4';
 env.RUSTFS_ENDPOINT=`http://127.0.0.1:${cube.address().port}`;
 env.RUSTFS_BUCKET='fixture-originals'; env.RUSTFS_ACCESS_KEY='synthetic'; env.RUSTFS_SECRET_KEY='synthetic-test-only';
@@ -224,11 +235,53 @@ try {
   await db.query("INSERT INTO agent_runs(message_id,tenant_id,case_id,state) VALUES($1,$2,$3,'running')", [message.message.id,actor.tenantId,id]);
   await api(toolPath, {token:newClaim.storage_token,method:'POST',body:toolCall,status:403});
   for (const [domain,scope] of [['erp','SYNTHETIC'],['openviking','viking://resources/test/user']]) await db.query('INSERT INTO integration_grants(tenant_id,owner_id,domain,scope) VALUES($1,$2,$3,$4)',[actor.tenantId,actor.userId,domain,scope]);
+  await db.query("INSERT INTO integration_grants(tenant_id,owner_id,domain,scope,tool_id,action,effect,resource_type) VALUES($1,$2,'erp','SYNTHETIC','list_erp_orders','read','deny','customer')",[actor.tenantId,actor.userId]);
+  await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall,status:403});
+  await db.query("DELETE FROM integration_grants WHERE tenant_id=$1 AND owner_id=$2 AND domain='erp' AND scope='SYNTHETIC' AND tool_id='list_erp_orders' AND effect='deny'",[actor.tenantId,actor.userId]);
+  const beforeUnboundErpCalls = erpRequests;
+  assert.equal((await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall,status:503})).error,'erp_identity_unbound');
+  assert.equal(erpRequests,beforeUnboundErpCalls);
+  const erpConnection = randomUUID();
+  await db.query("INSERT INTO erp_connections(id,tenant_id,name,base_url,auth_mode) VALUES($1,$2,'fixture-erp',$3,'shared_demo')",[erpConnection,actor.tenantId,`http://127.0.0.1:${cube.address().port}`]);
+  await db.query("INSERT INTO erp_identity_bindings(tenant_id,platform_user_id,connection_id,erp_user_id,credential_ref) VALUES($1,$2,$3,'forge-reader@example.test','env:ERP_API_TOKEN')",[actor.tenantId,actor.userId,erpConnection]);
+  const beforeRejectedErpCalls = erpRequests;
+  await db.query('UPDATE erp_identity_bindings SET active=false WHERE tenant_id=$1 AND platform_user_id=$2',[actor.tenantId,actor.userId]);
+  assert.equal((await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall,status:503})).error,'erp_identity_inactive');
+  await db.query('UPDATE erp_identity_bindings SET active=true WHERE tenant_id=$1 AND platform_user_id=$2',[actor.tenantId,actor.userId]);
+  await db.query("UPDATE erp_connections SET auth_mode='bound_user' WHERE id=$1",[erpConnection]);
+  await db.query("UPDATE erp_identity_bindings SET credential_ref='env:ERP_CREDENTIAL_FORGE_READER' WHERE tenant_id=$1 AND platform_user_id=$2",[actor.tenantId,actor.userId]);
+  const listedOrders = await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall});
+  assert.equal(listedOrders.status,'ok');
+  assert.equal(listedOrders.data.orders.length,1);
+  assert.equal(listedOrders.sources[0].doctype,'Sales Order');
+  assert(listedOrders.trace_id);
+  assert(erpRequests > beforeRejectedErpCalls);
+  assert(erpAuthHeaders.includes('token forge-reader-token'));
+  const secondCase = await api('/cases', { token: c, method: 'POST', body: { ...create, title: 'Limited ERP identity', customer_code: 'OTHER' }, status: 201 });
+  const secondMessage = await api(`/cases/${secondCase.id}/conversation/messages`, { token: c, method: 'POST', body: { client_message_id: randomUUID(), text: 'Read ERP with limited identity' }, status: 201 });
+  const secondHistory = await api(`/cases/${secondCase.id}/conversation`, { token: c });
+  const secondClaim = await api(`/agent-sessions/${secondHistory.session_id}/claim`, { token: c, method: 'POST', body: {} });
+  await db.query("INSERT INTO agent_runs(message_id,tenant_id,case_id,state) VALUES($1,$2,$3,'running')", [secondMessage.message.id,actor.tenantId,secondCase.id]);
+  await db.query("INSERT INTO integration_grants(tenant_id,owner_id,domain,scope,tool_id,action,resource_type) VALUES($1,$2,'erp','OTHER','list_erp_orders','read','customer')",[actor.tenantId,cId]);
+  await db.query("INSERT INTO erp_identity_bindings(tenant_id,platform_user_id,connection_id,erp_user_id,credential_ref) VALUES($1,$2,$3,'limited-reader@example.test','env:ERP_CREDENTIAL_LIMITED_READER')",[actor.tenantId,cId,erpConnection]);
+  const beforeNativeReject = erpRequests;
+  const nativeReject = await api(`/internal/agent-sessions/${secondHistory.session_id}/tools`,{token:secondClaim.storage_token,method:'POST',body:toolCall,status:403});
+  assert.equal(nativeReject.error,'erp_forbidden');
+  assert.equal(nativeReject.agent_guidance.category,'authorization');
+  assert.equal(nativeReject.agent_guidance.retryable,false);
+  assert.equal(nativeReject.agent_guidance.safe_next_step,'ask_erp_admin');
+  assert(nativeReject.agent_guidance.instruction.includes('Do not retry with altered arguments'));
+  assert(erpRequests > beforeNativeReject);
+  await db.query("UPDATE erp_connections SET auth_mode='shared_demo' WHERE id=$1",[erpConnection]);
+  await db.query("UPDATE erp_identity_bindings SET credential_ref='env:ERP_API_TOKEN' WHERE tenant_id=$1 AND platform_user_id=$2",[actor.tenantId,actor.userId]);
   await api(toolPath, {token:newClaim.storage_token,method:'POST',body:{domain:'erp',tool:'unknown',arguments:{}},status:400});
-  assert.equal((await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall})).orders.length,1);
+  const listedAgain = await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall});
+  assert.equal(listedAgain.data.orders.length,1);
+  assert.equal((await db.query("SELECT payload->>'erp_user' AS erp_user,payload->>'trace_id' AS trace_id FROM audit_events WHERE case_id=$1 AND event_type='agent.tool_read' ORDER BY created_at DESC LIMIT 1",[id])).rows[0].erp_user,'forge-reader@example.test');
+  assert.equal((await db.query("SELECT payload->>'trace_id' AS trace_id FROM audit_events WHERE case_id=$1 AND event_type='agent.tool_read' ORDER BY created_at DESC LIMIT 1",[id])).rows[0].trace_id,listedAgain.trace_id);
   for (const limit of [0, 21]) await api(toolPath,{token:newClaim.storage_token,method:'POST',body:{...toolCall,arguments:{limit}},status:400});
   const order = await api(toolPath,{token:newClaim.storage_token,method:'POST',body:{domain:'erp',tool:'read_erp_order',arguments:{sales_order:'SO-1'}}});
-  assert.equal(order.order.items.length,1); assert.equal(order.order.secret,undefined);
+  assert.equal(order.status,'ok'); assert.equal(order.data.order.items.length,1); assert.equal(order.data.order.secret,undefined); assert.equal(order.sources[0].doctype,'Sales Order');
   await api(toolPath,{token:newClaim.storage_token,method:'POST',body:{domain:'erp',tool:'read_erp_order',arguments:{sales_order:'SO-OTHER'}},status:404});
   const knowledgeCall = {domain:'openviking',tool:'search_case_knowledge',arguments:{query:'Evidence'}};
   assert.equal((await api(toolPath,{token:newClaim.storage_token,method:'POST',body:knowledgeCall})).resources.length,1);
@@ -238,7 +291,7 @@ try {
   assert.equal((await api(toolPath,{token:newClaim.storage_token,method:'POST',body:{domain:'openviking',tool:'read_knowledge_source',arguments:{uri:'viking://resources/test/user/doc'}}})).content,'Authorized source text');
   for (const mode of ['ask','auto','full']) {
     await db.query("UPDATE agent_runs SET settings=jsonb_set(settings,'{approval}',$2::jsonb) WHERE message_id=$1",[message.message.id,JSON.stringify(mode)]);
-    assert.equal((await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall})).orders.length,1);
+    assert.equal((await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall})).data.orders.length,1);
   }
   await db.query('DELETE FROM agent_runs WHERE message_id=$1',[message.message.id]);
   await api(`/cases/${id}/conversation/messages`,{token:a,method:'POST',body:{...messageInput,settings:{approval:'ask',model:'deepseek-flash',effort:'low'}},status:409});

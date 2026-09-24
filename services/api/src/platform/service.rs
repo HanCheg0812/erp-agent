@@ -47,9 +47,68 @@ impl std::fmt::Display for Error {
     }
 }
 impl std::error::Error for Error {}
+
+fn agent_guidance(code: &str) -> Option<Value> {
+    let (category, retryable, safe_next_step, instruction) = match code {
+        "platform_forbidden" => (
+            "authorization",
+            false,
+            "ask_platform_admin",
+            "Platform policy denied this tool or scope. Do not change arguments to bypass the policy or infer hidden data. Ask a platform administrator to review the task scope or grant.",
+        ),
+        "erp_forbidden" => (
+            "authorization",
+            false,
+            "ask_erp_admin",
+            "ERPNext denied the bound user. Do not retry with altered arguments or infer hidden records. Ask an ERPNext administrator to grant the required Role/User Permission or bind an authorized ERPNext user.",
+        ),
+        "erp_scope_missing" => (
+            "authorization",
+            false,
+            "ask_user_or_platform_admin",
+            "The current task scope does not include this customer or resource. Do not broaden the scope yourself; ask the user or a platform administrator to update the task scope.",
+        ),
+        "erp_identity_unbound" => (
+            "configuration",
+            false,
+            "ask_platform_admin",
+            "No ERPNext identity is bound to this platform user. Do not ask the user for an API token; ask a platform administrator to create the binding.",
+        ),
+        "erp_identity_inactive" => (
+            "configuration",
+            false,
+            "ask_platform_admin",
+            "The ERPNext identity binding is inactive. Ask a platform administrator to reactivate or replace the binding before retrying.",
+        ),
+        "erp_credentials_unavailable" => (
+            "configuration",
+            false,
+            "ask_platform_admin",
+            "The credential for the bound ERPNext identity is unavailable. Do not ask the user for a secret; ask a platform administrator to repair or rotate the server-side credential.",
+        ),
+        "erp_shared_identity_disabled" => (
+            "configuration",
+            false,
+            "ask_platform_admin",
+            "The shared ERPNext demo identity is disabled. Ask a platform administrator to configure a bound-user credential; do not retry with a different identity.",
+        ),
+        _ => return None,
+    };
+    Some(json!({
+        "category": category,
+        "retryable": retryable,
+        "safe_next_step": safe_next_step,
+        "instruction": instruction,
+    }))
+}
+
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        (self.0, Json(json!({"error":self.1,"message":self.2}))).into_response()
+        let mut body = json!({"error":self.1,"message":self.2});
+        if let Some(guidance) = agent_guidance(self.1) {
+            body["agent_guidance"] = guidance;
+        }
+        (self.0, Json(body)).into_response()
     }
 }
 impl From<tokio_postgres::Error> for Error {
@@ -268,6 +327,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "20260923190000_agent_worker_wakeup",
         include_str!("../../migrations/20260923190000_agent_worker_wakeup.sql"),
     ),
+    (
+        "20260924100000_add_integration_tool_policies",
+        include_str!("../../migrations/20260924100000_add_integration_tool_policies.sql"),
+    ),
+    (
+        "20260924110000_add_erp_identity_bindings",
+        include_str!("../../migrations/20260924110000_add_erp_identity_bindings.sql"),
+    ),
 ];
 const LEGACY_MIGRATION_IDS: &[(&str, &str)] = &[
     ("001_auth", "20260921171235_create_auth_schema"),
@@ -431,6 +498,21 @@ mod tests {
         ] {
             assert!(session_id(value).is_err(), "{value}");
         }
+    }
+
+    #[test]
+    fn agent_guidance_is_explicit_for_permission_errors() {
+        let guidance = agent_guidance("erp_forbidden").unwrap();
+        assert_eq!(guidance["category"], "authorization");
+        assert_eq!(guidance["retryable"], false);
+        assert_eq!(guidance["safe_next_step"], "ask_erp_admin");
+        assert!(
+            guidance["instruction"]
+                .as_str()
+                .unwrap()
+                .contains("Do not retry with altered arguments")
+        );
+        assert!(agent_guidance("unknown_error").is_none());
     }
 
     #[test]

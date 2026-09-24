@@ -1,5 +1,5 @@
 use super::{
-    response::{response_json, select, unavailable},
+    response::{erp_response_json, select, unavailable},
     types::Call,
 };
 use crate::platform::*;
@@ -38,22 +38,63 @@ fn sales_order(arguments: Value) -> Result<String> {
     Ok(value)
 }
 
+pub(super) struct ErpAuth {
+    pub(super) token: String,
+    pub(super) origin: String,
+    pub(super) erp_user_id: String,
+}
+
+fn source(order: &Value) -> Option<Value> {
+    Some(json!({
+        "doctype": "Sales Order",
+        "name": order.get("name")?.as_str()?,
+        "modified": order.get("modified").cloned().unwrap_or(Value::Null),
+    }))
+}
+
+pub(super) fn result_envelope(tool: &str, raw: Value, trace_id: &str) -> Result<Value> {
+    let as_of = chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
+    let (data, sources) = match tool {
+        "list_erp_orders" => {
+            let orders = raw
+                .get("orders")
+                .and_then(Value::as_array)
+                .cloned()
+                .ok_or_else(|| unavailable("erp_invalid_result", "ERP order list is incomplete"))?;
+            let sources = orders.iter().filter_map(source).collect::<Vec<_>>();
+            (json!({"orders": orders}), sources)
+        }
+        "read_erp_order" => {
+            let order = raw
+                .get("order")
+                .cloned()
+                .filter(Value::is_object)
+                .ok_or_else(|| {
+                    unavailable("erp_invalid_result", "ERP order result is incomplete")
+                })?;
+            let sources = source(&order).into_iter().collect::<Vec<_>>();
+            (json!({"order": order}), sources)
+        }
+        _ => return Err(Error::bad("Unknown ERP result tool")),
+    };
+    Ok(json!({
+        "status": "ok",
+        "as_of": as_of,
+        "trace_id": trace_id,
+        "sources": sources,
+        "data": data,
+        "warnings": [],
+    }))
+}
+
 pub(super) async fn erp(
     app: &App,
     call: &Call,
     scopes: Vec<String>,
     customer: Option<String>,
     part: Option<String>,
+    auth: ErpAuth,
 ) -> Result<Value> {
-    let token = std::env::var("ERP_API_TOKEN")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            unavailable(
-                "erp_not_configured",
-                "ERP integration credentials are not configured",
-            )
-        })?;
     let customers = authorized_customers(scopes, customer.as_deref());
     if customers.is_empty() {
         return Err(Error(
@@ -62,10 +103,9 @@ pub(super) async fn erp(
             "No ERP customer is granted to this user in the current case scope",
         ));
     }
-    let origin = env("ERP_API_URL", "http://127.0.0.1:18080");
     let base = format!(
         "{}/api/resource/Sales%20Order",
-        origin.trim_end_matches('/')
+        auth.origin.trim_end_matches('/')
     );
     if call.tool == "list_erp_orders" {
         let limit = list_limit(call.arguments.clone())?;
@@ -78,10 +118,10 @@ pub(super) async fn erp(
                 part
             ]));
         }
-        let value = response_json(
+        let value = erp_response_json(
             app.http
                 .get(&base)
-                .header("Authorization", format!("token {token}"))
+                .header("Authorization", format!("token {}", auth.token))
                 .query(&[
                     (
                         "fields",
@@ -143,10 +183,10 @@ pub(super) async fn erp(
     url.path_segments_mut()
         .map_err(|_| Error::bad("Invalid ERP endpoint"))?
         .push(&sales_order);
-    let value = response_json(
+    let value = erp_response_json(
         app.http
             .get(url)
-            .header("Authorization", format!("token {token}"))
+            .header("Authorization", format!("token {}", auth.token))
             .send()
             .await
             .map_err(anyhow::Error::from)?,
@@ -236,5 +276,21 @@ mod tests {
         ] {
             assert!(sales_order(value).is_err());
         }
+    }
+
+    #[test]
+    fn result_envelope_is_traceable_and_keeps_erp_data_nested() {
+        let value = result_envelope(
+            "list_erp_orders",
+            json!({"orders":[{"name":"SO-1","modified":"2026-09-24T00:00:00Z"}]}),
+            "trace-1",
+        )
+        .unwrap();
+        assert_eq!(value["status"], "ok");
+        assert_eq!(value["trace_id"], "trace-1");
+        assert_eq!(value["data"]["orders"][0]["name"], "SO-1");
+        assert_eq!(value["sources"][0]["doctype"], "Sales Order");
+        assert_eq!(value["sources"][0]["modified"], "2026-09-24T00:00:00Z");
+        assert_eq!(value["warnings"], json!([]));
     }
 }

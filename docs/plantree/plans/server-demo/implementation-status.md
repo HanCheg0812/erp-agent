@@ -1,5 +1,9 @@
 # Implementation Status
 
+2026-09-24 ERP MCP Phase A 真实双用户权限交集：在本地 ERPNext v16.35.0 真实 HTTP API 上，用 `planner@example.test -> forge-reader@example.test` 和同租户 `erp-boundary-limited@example.test -> limited-reader@example.test` 完成只读联调。forge 通过 Amazon + `SH-04-GREY-XL` 读到 `SAL-ORD-2026-00003`；limited 通过 Temu + `SH-04-GREY-L` 仅读到 `SAL-ORD-2026-00001`，列表/明细均返回统一 envelope，审计中的 `erp_user` 与 `trace_id` 可对应。limited 读取 Shopee `SAL-ORD-2026-00002` 时 ERPNext 原生 403 被转为 `erp_forbidden`（`retryable=false`、`safe_next_step=ask_erp_admin`）；平台显式 deny 返回 `platform_forbidden`；案件客户超出平台 grant 返回 `erp_scope_missing`。请求使用合成用户/订单，未执行 ERP 写入；正式 Vault/KMS provider、撤销/过期轮换、生产 ERPNext 尚未验收。可重复脚本见[真实 ERP 权限边界验证](../../../../scripts/validate-real-erp-boundary.mjs)。
+
+2026-09-24 ERP MCP Phase A 第一片：ERP `list_erp_orders` / `read_erp_order` 统一返回 `status`、`as_of`、`trace_id`、`sources`、`data`、`warnings` envelope；审计事件写入同一 `trace_id`，来源只保留 Sales Order 的公开标识与 `modified`，ERP 原始响应仍由适配器字段白名单裁剪。系统 fixture 已覆盖 envelope、来源和审计 trace 关联；API 53 项单元测试、3 项 HTTP 测试及完整 `npm run check` 通过。此项只覆盖 ERP 只读切片，OpenViking envelope、正式凭据 provider、撤销/过期轮换和生产 ERPNext 仍待下一步验收。
+
 2026-09-23 Web 入口调整：按当前个人演示范围移除未登录页 `View demo` 及浏览器内合成案件、固定回复、模拟工具调用和模拟审批分支；只保留真实登录/注册与账户会话。前端 `npm run typecheck` 和 `npm run build:web` 通过；在本地 4174 浏览器确认未登录只出现登录表单，切换后显示注册表单。此项不改变后端案件、方案、审批及 ERP/MCP 权限边界；生产部署未做。
 
 2026-09-23 多进程 Agent 分发补充：`agent_runs` 每条消息一行，同一案件维持单活，不同案件由多个独立 Rust worker 同时消费；HTTP 进程可关闭内置 worker。事务提交后的 PostgreSQL `NOTIFY` 唤醒所有 worker，5 秒扫描兜底，迁移注册遗漏已修复并加 SQL 文件覆盖测试。50 个独立用户/案件、2 秒固定 runtime 的一次本地探针中，1/2/4/8 个 worker 各 8 槽的完成 P95 分别为 12.49/6.40/4.32/2.54 秒，50/50 均完成；8 worker 的实际峰值为 50。此为模拟 Runtime 分发测量，不是 DeepSeek 或 Cube 业务容量。Cube 官方预热建议强调真正的 Agent session readiness 和明确的 session 池/每沙箱任务模型；详情及命令见 [Agent 并发探针](agent-runtime-concurrency.md)。
