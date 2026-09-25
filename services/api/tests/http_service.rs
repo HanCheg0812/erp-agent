@@ -26,7 +26,7 @@ async fn health_is_a_public_library_router_contract() {
     assert_eq!(response.headers()["cache-control"], "no-store");
     assert_eq!(
         json_body(response).await,
-        json!({"status":"ok","backend":"rust"})
+        json!({"status":"ok","backend":"rust","agent_execution_backend":"local","cube_resident_configured":false})
     );
 }
 

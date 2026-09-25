@@ -26,6 +26,46 @@ impl std::fmt::Display for TurnFailure {
 impl std::error::Error for TurnFailure {}
 
 #[derive(Default)]
+struct CubeLines {
+    pending: Vec<u8>,
+    total: usize,
+}
+impl CubeLines {
+    fn push(&mut self, chunk: &[u8]) -> anyhow::Result<Vec<Value>> {
+        self.total += chunk.len();
+        ensure!(
+            self.total <= 2 * 1024 * 1024,
+            "Cube runtime response too large"
+        );
+        self.pending.extend_from_slice(chunk);
+        let mut events = Vec::new();
+        let mut consumed = 0;
+        for (index, byte) in self.pending.iter().enumerate() {
+            if *byte == b'\n' {
+                let line = &self.pending[consumed..index];
+                ensure!(line.len() <= 128 * 1024, "Cube runtime event too large");
+                if !line.is_empty() {
+                    events
+                        .push(serde_json::from_slice(line).context("Invalid Cube runtime event")?);
+                }
+                consumed = index + 1;
+            }
+        }
+        self.pending.drain(..consumed);
+        ensure!(
+            self.pending.len() <= 128 * 1024,
+            "Cube runtime event too large"
+        );
+        Ok(events)
+    }
+
+    fn finish(&self) -> anyhow::Result<()> {
+        ensure!(self.pending.is_empty(), "Incomplete Cube runtime event");
+        Ok(())
+    }
+}
+
+#[derive(Default)]
 struct Reply {
     text: String,
     tools: Vec<Value>,
@@ -234,6 +274,9 @@ async fn turn(
     reply: &mut Reply,
     stop: &tokio_util::sync::CancellationToken,
 ) -> anyhow::Result<()> {
+    if crate::sandboxes::bridge::enabled() {
+        return turn_cube(app, db, row, reply, stop).await;
+    }
     let actor = Principal {
         tenant_id: uuid(row["tenant_id"].as_str().unwrap())?,
         user_id: uuid(row["actor_id"].as_str().unwrap())?,
@@ -247,7 +290,8 @@ async fn turn(
     record["approvals"]=json!(array(db,"SELECT to_jsonb(a)-'request_digest'-'idempotency_key' FROM approvals a WHERE tenant_id=$1 AND case_id=$2 ORDER BY created_at DESC",&[&actor.tenant_id,&id]).await?);
     let session = row["session_id"].as_str().unwrap();
     let claim = agent_sessions::claim(db, &actor, session).await?;
-    let memories = objects::memories(db, &actor).await?;
+    let memories =
+        objects::recalled_memories(db, &actor, row["input"].as_str().unwrap_or("")).await?;
     let token = claim["storage_token"].as_str().unwrap();
     let (mcp_session, mcp_token) = mcp_sessions::insert(db, &actor, Some(id), Some(mid)).await?;
     let base = env("DEEPSEEK_BASE_URL", "https://api.deepseek.com");
@@ -518,6 +562,13 @@ async fn turn(
                     db.execute("UPDATE agent_runs SET loaded_skills=CASE WHEN loaded_skills @> $2::jsonb THEN loaded_skills ELSE loaded_skills || $2::jsonb END WHERE message_id=$1",&[&mid,&reference]).await?;
                 }
                 "failed" => {
+                    if let Some(detail) = event["detail"].as_str() {
+                        eprintln!(
+                            "Cube runtime failure detail: code={} detail={}",
+                            event["code"].as_str().unwrap_or("runtime"),
+                            detail
+                        );
+                    }
                     runtime_failure = Some(match event["code"].as_str() {
                         Some("timeout") => TurnFailure::Timeout,
                         Some("interrupted") => TurnFailure::Interrupted,
@@ -581,6 +632,343 @@ async fn turn(
     }
     result
 }
+
+async fn turn_cube(
+    app: &App,
+    db: &tokio_postgres::Client,
+    row: &Value,
+    reply: &mut Reply,
+    stop: &tokio_util::sync::CancellationToken,
+) -> anyhow::Result<()> {
+    ensure!(!stop.is_cancelled(), "Run interrupted");
+    let actor = Principal {
+        tenant_id: uuid(row["tenant_id"].as_str().unwrap())?,
+        user_id: uuid(row["actor_id"].as_str().unwrap())?,
+        roles: serde_json::from_value(row["roles"].clone())?,
+        email: String::new(),
+    };
+    let case_id = uuid(row["case_id"].as_str().unwrap())?;
+    let message_id = row["message_id"].as_i64().unwrap();
+    // Cube is an internal execution detail. The business UI never manages a
+    // sandbox, so the first queued turn provisions the resident instance and
+    // later turns reuse it through the case-bound database lease.
+    crate::sandboxes::ensure_resident_ready(app, &actor, case_id).await?;
+    let mut record = cases::case(db, &actor, case_id, false).await?;
+    record["proposals"] = json!(array(
+        db,
+        "SELECT to_jsonb(p) FROM proposals p WHERE tenant_id=$1 AND case_id=$2 ORDER BY case_version DESC",
+        &[&actor.tenant_id, &case_id]
+    )
+    .await?);
+    record["approvals"] = json!(array(
+        db,
+        "SELECT to_jsonb(a)-'request_digest'-'idempotency_key' FROM approvals a WHERE tenant_id=$1 AND case_id=$2 ORDER BY created_at DESC",
+        &[&actor.tenant_id, &case_id]
+    )
+    .await?);
+
+    let sandbox = db
+        .query_opt(
+            "SELECT to_jsonb(s) FROM case_sandboxes s WHERE tenant_id=$1 AND case_id=$2 AND state='provisioned' ORDER BY created_at DESC LIMIT 1",
+            &[&actor.tenant_id, &case_id],
+        )
+        .await?
+        .context("Cube sandbox is not provisioned")?;
+    let sandbox: Value = sandbox.get(0);
+    ensure!(sandbox["guest_ready"] == true, "Cube runtime is not ready");
+    let sandbox_id = sandbox["sandbox_id"]
+        .as_str()
+        .context("Cube sandbox id missing")?;
+    let operation = uuid(
+        sandbox["id"]
+            .as_str()
+            .context("Cube operation id missing")?,
+    )?;
+
+    let settings: crate::integrations::Settings = serde_json::from_value(row["settings"].clone())?;
+    settings.validate()?;
+    let base = env("DEEPSEEK_BASE_URL", "https://api.deepseek.com");
+    ensure!(
+        base == "https://api.deepseek.com"
+            && ["deepseek-flash", "deepseek-v4-pro"].contains(&settings.model.as_str()),
+        "Unsupported model configuration"
+    );
+    let memories =
+        objects::recalled_memories(db, &actor, row["input"].as_str().unwrap_or("")).await?;
+    let session_id = row["session_id"]
+        .as_str()
+        .context("Agent session missing")?;
+    let revision: i64 = db
+        .query_one(
+            "SELECT revision::bigint FROM agent_sessions WHERE id=$1 AND tenant_id=$2 AND case_id=$3",
+            &[&session_id, &actor.tenant_id, &case_id],
+        )
+        .await?
+        .get(0);
+
+    let mut images = Vec::<(String, String)>::new();
+    let mut attachment_notes = Vec::<String>::new();
+    if row["resumable"] != true {
+        let expected: i64 = db
+            .query_one(
+                "SELECT count(*) FROM conversation_message_attachments WHERE tenant_id=$1 AND owner_id=$2 AND case_id=$3 AND message_id=$4",
+                &[&actor.tenant_id, &actor.user_id, &case_id, &message_id],
+            )
+            .await?
+            .get(0);
+        let attachments = db
+            .query(
+                "SELECT d.filename,d.content_type,d.object_key,a.source_sha256,d.bytes,d.id FROM conversation_message_attachments a JOIN documents d ON d.id=a.document_id AND d.tenant_id=a.tenant_id AND d.owner_id=a.owner_id AND d.case_id=a.case_id WHERE a.tenant_id=$1 AND a.owner_id=$2 AND a.case_id=$3 AND a.message_id=$4 AND d.state='ready' ORDER BY a.ordinal",
+                &[&actor.tenant_id, &actor.user_id, &case_id, &message_id],
+            )
+            .await?;
+        ensure!(
+            attachments.len() == expected as usize,
+            "Attachment is no longer ready"
+        );
+        let mut total = 0usize;
+        for attachment in attachments {
+            let filename: String = attachment.get(0);
+            let content_type: String = attachment.get(1);
+            let key: String = attachment.get(2);
+            let hash: String = attachment.get(3);
+            let size: i32 = attachment.get(4);
+            let document_id: uuid::Uuid = attachment.get(5);
+            total += size as usize;
+            ensure!(total <= 5 * 1024 * 1024, "Attachment input limit");
+            let bucket = app
+                .bucket
+                .as_ref()
+                .context("Document storage unavailable")?;
+            let bytes = objects::get_verified(bucket, &key, &hash).await?;
+            ensure!(bytes.len() == size as usize, "Attachment size changed");
+            if content_type.starts_with("image/") {
+                ensure!(
+                    settings.model == "deepseek-flash",
+                    "Image input requires DeepSeek Flash"
+                );
+                images.push((content_type, STANDARD.encode(bytes)));
+                attachment_notes.push(format!(
+                    "Image attachment {}: {} (visible in this turn).",
+                    document_id, filename
+                ));
+            } else {
+                let extracted = objects::read_document(
+                    &content_type,
+                    bytes,
+                    settings.model == "deepseek-flash",
+                    0,
+                    1,
+                    4,
+                    0,
+                )
+                .await?;
+                let mut warnings = extracted.warnings;
+                for image in extracted.images {
+                    if images.len() < 4 {
+                        images.push((image.mime_type, STANDARD.encode(image.bytes)));
+                    } else {
+                        warnings.push(format!(
+                            "{} was not sent in this turn; use attachment_read.",
+                            image.label
+                        ));
+                    }
+                }
+                attachment_notes.push(
+                    json!({
+                        "document_id":document_id,
+                        "filename":filename,
+                        "source_content_type":content_type,
+                        "untrusted_document_text":extracted.text,
+                        "next_offset":extracted.next_offset,
+                        "next_page":extracted.next_page,
+                        "next_image_offset":extracted.next_image_offset,
+                        "complete":extracted.complete && warnings.is_empty(),
+                        "warnings":warnings,
+                        "continuation_tool":"attachment_read"
+                    })
+                    .to_string(),
+                );
+            }
+        }
+    }
+
+    let permission_context = json!({
+        "mode": settings.approval,
+        "operation_tools": ["memory_save", "case_set_context", "proposal_create"],
+        "read_tools": [
+            "case_read", "attachment_read", "todo", "skill_find", "skill_manage",
+            "mcp__erp__list_erp_orders", "mcp__erp__read_erp_order",
+            "mcp__openviking__search_case_knowledge", "mcp__openviking__read_knowledge_source"
+        ],
+        "business_approval_tool": "request_proposal_approval",
+        "can_approve_business_proposals": actor.roles.iter().any(|role| role == "approver"),
+        "business_approval_requires_human": true
+    });
+    let user_text = row["input"].as_str().unwrap_or("");
+    let mut turn_text = if user_text.is_empty() {
+        "Please review the attached material.".to_owned()
+    } else {
+        user_text.to_owned()
+    };
+    if !attachment_notes.is_empty() {
+        turn_text.push_str("\n\nAttached material status:\n");
+        turn_text.push_str(&attachment_notes.join("\n\n"));
+    }
+    let input = json!({
+        "text": turn_text,
+        "images": images,
+        "new_session": revision == 0,
+        "case": record,
+        "operation": row["operation"],
+        "memories": memories,
+        "approval": settings.approval,
+        "permission_context": permission_context,
+        "effort": settings.effort,
+        "resume": row["resumable"] == true
+    });
+    ensure!(!stop.is_cancelled(), "Run interrupted");
+    let url = crate::sandboxes::bridge::guest_url(sandbox_id, "/v1/turn")?;
+    let token = crate::sandboxes::bridge::token_for(operation)?;
+    let configured_timeout: u64 = env("AGENT_TURN_TIMEOUT_SECONDS", "0").parse()?;
+    ensure!(configured_timeout <= 3600, "Invalid turn timeout");
+    let mut request = app
+        .http
+        .post(url)
+        .header("x-agent-runtime-token", token)
+        .json(&input);
+    if configured_timeout > 0 {
+        request = request.timeout(Duration::from_secs(configured_timeout.saturating_add(35)));
+    }
+    let mut response = request
+        .send()
+        .await
+        .context("Cube runtime request failed")?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response
+            .bytes()
+            .await
+            .context("Reading Cube runtime failure")?;
+        anyhow::bail!(
+            "Cube runtime returned {status}: {}",
+            String::from_utf8_lossy(&body[..body.len().min(1024)])
+        );
+    }
+
+    let mut snapshot = if let Some(hash) = row["skill_catalog_hash"].as_str() {
+        db.query_opt(
+            "SELECT snapshot FROM agent_skill_catalogs WHERE hash=$1",
+            &[&hash],
+        )
+        .await?
+        .map(|value| {
+            let source: String = value.get(0);
+            catalog(&source, hash)
+        })
+        .transpose()?
+    } else {
+        None
+    };
+    let mut completed = false;
+    let mut runtime_failure = None;
+    let mut first_token_seen = row["first_token_at"].as_str().is_some();
+    let mut lines = CubeLines::default();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .context("Reading Cube runtime stream")?
+    {
+        for event in lines.push(&chunk)? {
+            ensure!(!completed, "Invalid Cube runtime stream");
+            let kind = event["type"].as_str().context("Cube event type missing")?;
+            if !first_token_seen
+                && ["text_delta", "text_replace"].contains(&kind)
+                && event["text"].as_str().is_some_and(|text| !text.is_empty())
+            {
+                db.execute(
+                "UPDATE agent_runs SET first_token_at=COALESCE(first_token_at,clock_timestamp()) WHERE message_id=$1",
+                &[&message_id],
+            )
+            .await?;
+                first_token_seen = true;
+            }
+            match kind {
+                "skill_catalog" => {
+                    ensure!(snapshot.is_none(), "Late catalog");
+                    let source = event["snapshot"].as_str().context("Catalog missing")?;
+                    let hash = event["hash"].as_str().context("Catalog hash missing")?;
+                    snapshot = Some(catalog(source, hash)?);
+                    db.execute(
+                    "INSERT INTO agent_skill_catalogs(hash,snapshot) VALUES($1,$2) ON CONFLICT(hash) DO NOTHING",
+                    &[&hash, &source],
+                )
+                .await?;
+                    db.execute(
+                        "UPDATE agent_runs SET skill_catalog_hash=$2 WHERE message_id=$1",
+                        &[&message_id, &hash],
+                    )
+                    .await?;
+                }
+                "skill_loaded" => {
+                    let found = snapshot
+                        .as_ref()
+                        .and_then(|value| value["skills"].as_array())
+                        .is_some_and(|skills| {
+                            skills.iter().any(|skill| {
+                                skill["id"] == event["id"]
+                                    && skill["version"] == event["version"]
+                                    && skill["sha256"] == event["sha256"]
+                            })
+                        });
+                    ensure!(found, "Loaded skill differs from catalog");
+                    let reference = json!([{
+                        "id":event["id"],
+                        "version":event["version"],
+                        "sha256":event["sha256"]
+                    }]);
+                    db.execute(
+                    "UPDATE agent_runs SET loaded_skills=CASE WHEN loaded_skills @> $2::jsonb THEN loaded_skills ELSE loaded_skills || $2::jsonb END WHERE message_id=$1",
+                    &[&message_id, &reference],
+                )
+                .await?;
+                }
+                "failed" => {
+                    if let Some(detail) = event["detail"].as_str() {
+                        eprintln!("Cube runtime failure detail: {}", detail);
+                    }
+                    runtime_failure = Some(match event["code"].as_str() {
+                        Some("timeout") => TurnFailure::Timeout,
+                        Some("interrupted") => TurnFailure::Interrupted,
+                        _ => TurnFailure::Runtime,
+                    });
+                    completed = true;
+                }
+                "suspended" => {
+                    reply.suspended = true;
+                    completed = true;
+                    reply.close("completed");
+                }
+                _ => {
+                    ensure!(snapshot.is_some(), "Model activity before catalog");
+                    reply.event(&event)?;
+                    if kind == "completed" {
+                        completed = true;
+                    }
+                }
+            }
+            reply.save(db, message_id).await?;
+        }
+    }
+    lines.finish()?;
+    if let Some(error) = runtime_failure {
+        return Err(error.into());
+    }
+    ensure!(completed, "Cube runtime ended without completion");
+    reply.save(db, message_id).await?;
+    Ok(())
+}
+
 async fn candidate_ids(app: &App) -> anyhow::Result<Vec<(i64, uuid::Uuid, String)>> {
     let db = app.db.get().await?;
     let rows = db.query("SELECT message_id,case_id,state FROM agent_runs WHERE state IN ('queued','running','waiting') ORDER BY CASE state WHEN 'queued' THEN 0 WHEN 'running' THEN 1 ELSE 2 END,updated_at LIMIT 100",&[]).await?;
@@ -658,7 +1046,9 @@ async fn process_candidate(
             let Some(row)=row else{return Ok::<_,anyhow::Error>(())};let row:Value=row.get(0);
             if row["cancel_requested"]==true||(row["state"]=="running" && row["resumable"]!=true)||row["active"]!=true||!row["roles"].as_array().is_some_and(|rs|rs.iter().any(|r|r=="planner")){
                 let tx=db.transaction().await?;
-                tx.execute("UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1",&[&row["session_id"].as_str().unwrap()]).await?;
+                if !crate::sandboxes::bridge::enabled() {
+                    tx.execute("UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1",&[&row["session_id"].as_str().unwrap()]).await?;
+                }
                 let error = if row["operation"] == "compact" { "Context compression was interrupted. You can retry compression." } else { "Run interrupted. Send a new message to continue." };
                 tx.execute("UPDATE agent_runs SET state='failed',error=$2,tools=COALESCE((SELECT jsonb_agg(CASE WHEN tool->>'state'='running' THEN tool||'{\"state\":\"failed\"}'::jsonb ELSE tool END) FROM jsonb_array_elements(tools) tool),'[]'::jsonb),steps=COALESCE((SELECT jsonb_agg(CASE WHEN step->>'state'='running' THEN step||'{\"state\":\"failed\"}'::jsonb ELSE step END) FROM jsonb_array_elements(steps) step),'[]'::jsonb),finished_at=now(),updated_at=now() WHERE message_id=$1",&[&id,&error]).await?;
                 if row["cancel_requested"]==true {tx.execute("UPDATE agent_runs SET state='cancelled',error=NULL WHERE message_id=$1", &[&id]).await?;}
@@ -666,7 +1056,9 @@ async fn process_candidate(
                 tx.commit().await?;return Ok(())
             }
             if row["state"]=="waiting" || row["state"]=="running" {
-                db.execute("UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1", &[&row["session_id"].as_str().unwrap()]).await?;
+                if !crate::sandboxes::bridge::enabled() {
+                    db.execute("UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1", &[&row["session_id"].as_str().unwrap()]).await?;
+                }
                 db.execute("UPDATE agent_runs SET state='waiting',updated_at=now() WHERE message_id=$1 AND state IN ('running','waiting')", &[&id]).await?;
                 crate::permissions::resolve_waiting(app,id).await?;
                 return Ok(());
@@ -674,12 +1066,16 @@ async fn process_candidate(
             if db.execute("UPDATE agent_runs SET state='running',started_at=now(),updated_at=now() WHERE message_id=$1 AND state='queued' AND NOT cancel_requested",&[&id]).await?==0{return Ok(());}
             let mut reply=if row["resumable"]==true { Reply { text:row["text"].as_str().unwrap_or("").into(), tools:serde_json::from_value(row["tools"].clone())?,steps:serde_json::from_value(row["steps"].clone())?,compactions:serde_json::from_value(row["compactions"].clone())?,context_usage:row.get("context_usage").filter(|value| !value.is_null()).cloned(),boundary:true,suspended:false } } else { Reply::default() };
             let result=turn(app,&db,&row,&mut reply,stop).await;
-            db.execute("UPDATE mcp_sessions SET revoked_at=now(),updated_at=now() WHERE run_message_id=$1 AND revoked_at IS NULL", &[&id]).await?;
+            if !crate::sandboxes::bridge::enabled() {
+                db.execute("UPDATE mcp_sessions SET revoked_at=now(),updated_at=now() WHERE run_message_id=$1 AND revoked_at IS NULL", &[&id]).await?;
+            }
             let recoverable = stop.is_cancelled() && db.query_one("SELECT resumable FROM agent_runs WHERE message_id=$1", &[&id]).await?.get::<_,bool>(0);
             if let Err(error)=&result {if !recoverable {eprintln!("Agent run {id} failed: {error:#}");reply.close("failed");for t in &mut reply.tools{if t["state"]=="running"{t["state"]=json!("failed")}}}}
             reply.save(&db,id).await?;
             let tx=db.transaction().await?;
-            tx.execute("UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1",&[&row["session_id"].as_str().unwrap()]).await?;
+            if !crate::sandboxes::bridge::enabled() {
+                tx.execute("UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1",&[&row["session_id"].as_str().unwrap()]).await?;
+            }
             let cancelled: bool = tx.query_one("SELECT cancel_requested FROM agent_runs WHERE message_id=$1 FOR UPDATE",&[&id]).await?.get(0);
             let error = if cancelled || recoverable { None } else { result.as_ref().err().map(|error| if row["operation"] == "compact" { "Context compression failed. You can retry compression." } else { match error.downcast_ref::<TurnFailure>() {
                 Some(TurnFailure::Timeout) => "Generation reached the time limit. Send a message to continue from the saved content.",
@@ -794,6 +1190,29 @@ pub async fn run(app: App, stop: Arc<tokio_util::sync::CancellationToken>, concu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cube_lines_decode_events_across_network_chunks() {
+        let mut lines = CubeLines::default();
+        assert!(lines.push(b"{\"type\":\"text_").unwrap().is_empty());
+        assert_eq!(
+            lines
+                .push(b"delta\",\"text\":\"ok\"}\n{\"type\":\"completed\"}\n")
+                .unwrap(),
+            vec![
+                json!({"type":"text_delta","text":"ok"}),
+                json!({"type":"completed"})
+            ]
+        );
+        lines.finish().unwrap();
+        assert!(lines.push(b"partial").unwrap().is_empty());
+        assert!(lines.finish().is_err());
+        assert!(
+            CubeLines::default()
+                .push(&vec![b'x'; 128 * 1024 + 1])
+                .is_err()
+        );
+    }
 
     fn valid_catalog() -> (String, String) {
         let source = "# Skill\nDo the bounded task.";

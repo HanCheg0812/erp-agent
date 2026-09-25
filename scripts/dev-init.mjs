@@ -16,6 +16,11 @@ const contents = [
   'RUSTFS_S3_PORT=9020',
   'RUSTFS_CONSOLE_PORT=9021',
   'RUSTFS_ENDPOINT=http://127.0.0.1:9020',
+  'TEI_PORT=8080',
+  'TEI_MODEL_ID=BAAI/bge-m3',
+  'TEI_MODEL_REVISION=5617a9f61b028005a4858fdac845db406aefb181',
+  'RAG_EMBEDDING_URL=http://127.0.0.1:8080',
+  'RAG_EMBEDDING_MODEL_ID=bge-m3',
   'API_HOST=127.0.0.1',
   'API_PORT=3100',
   'DEMO_TENANT=demo',
@@ -31,7 +36,7 @@ try {
   const path = new URL('../.env', import.meta.url);
   const existing = await readFile(path, 'utf8');
   const names = new Set(existing.split('\n').map(line => line.split('=')[0]));
-  const additions = contents.split('\n').filter(line => line.startsWith('RUSTFS_') && !names.has(line.split('=')[0]));
+  const additions = contents.split('\n').filter(line => /^(RUSTFS_|TEI_|RAG_EMBEDDING_)/.test(line) && !names.has(line.split('=')[0]));
   if (additions.length) await appendFile(path, `\n${additions.join('\n')}\n`);
-  console.log('Existing credentials preserved; missing RustFS settings added.');
+  console.log('Existing credentials preserved; missing service settings added.');
 }

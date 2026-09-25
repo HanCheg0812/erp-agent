@@ -9,7 +9,13 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, path::Path, sync::Arc};
 
-pub const TOOLS: [&str; 5] = ["case_read", "attachment_read", "todo", "skill_find", "skill_manage"];
+pub const TOOLS: [&str; 5] = [
+    "case_read",
+    "attachment_read",
+    "todo",
+    "skill_find",
+    "skill_manage",
+];
 pub const SNAPSHOT: &str = include_str!(concat!(env!("OUT_DIR"), "/skill-catalog.json"));
 
 #[derive(Deserialize)]

@@ -121,6 +121,7 @@ pub(super) async fn erp(
         let value = erp_response_json(
             app.http
                 .get(&base)
+                .timeout(std::time::Duration::from_secs(8))
                 .header("Authorization", format!("token {}", auth.token))
                 .query(&[
                     (
@@ -186,6 +187,7 @@ pub(super) async fn erp(
     let value = erp_response_json(
         app.http
             .get(url)
+            .timeout(std::time::Duration::from_secs(8))
             .header("Authorization", format!("token {}", auth.token))
             .send()
             .await

@@ -54,7 +54,9 @@ pub async fn request(method: reqwest::Method, path: &str, body: Option<Value>) -
     let mut request = reqwest::Client::new()
         .request(method, url)
         .bearer_auth(std::env::var("JCODE_SESSION_STORE_TOKEN")?)
-        .timeout(std::time::Duration::from_secs(if path == "attachments/read" { 90 } else { 10 }));
+        .timeout(std::time::Duration::from_secs(
+            if path == "attachments/read" { 90 } else { 10 },
+        ));
     if let Some(body) = body {
         request = request.json(&body);
     }

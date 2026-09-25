@@ -18,6 +18,10 @@ Web Agent Chat 与灰白视觉的实现、验证及边界见 [Web 会话记录](
 
 [开源实践调研](rag-references.md)记录 MinerU 官方 Skill / Document Explorer、社区 OpenViking + DeepSeek 问答、官方集成和 RAG-Anything，重点借鉴按需深读、图表上下文及可定位引用；案例阅读不等于本地运行验收。
 
+2026-09-24：[知识检索与长期记忆方案调研](knowledge-memory-research.md)比较 OpenViking、Knowhere、PostgreSQL 原生检索、LLM Wiki 及记忆方案，依据为固定版本源码、公开资料与预印本摘要，未部署或评测；建议待用户确认，未改变已确认决策。
+
+2026-09-24：[记忆与 OpenViking 架构](memory-openviking-architecture.md)形成云端设计基线并完成 P0/P1 基础实现：JCode 无状态，PostgreSQL 负责记忆权威状态、词法召回和 pgvector 扩展，OpenViking 统一承载企业 Resource/Wiki/RAG；个人记忆投影暂不默认开启，真实 embedding、向量召回、OpenViking 一致性和混合负载仍待实测。
+
 按 [Skill 发现与 ERP/知识工具组合](skill-tool-design.md)接入四份版本化指引和受控发现/加载工具，真实模型与 API 重启验证通过；[可替换解析流水线](parser-pipeline-design.md)的 Rust trait、配置继承、阶段依赖与结果标识已实现并通过 fixture 测试。真实解析后端和 Worker 尚未接入，具体证据与 DeepSeek 连续工具调用修复见 [Skill/解析基础联调](skill-parser-integration.md)。
 
 目标：以真实运行的 ERPNext 和合成资料，演示客户需求变更、影响分析、人工确认、受控写入及执行跟踪。ERP MCP 的身份、工具授权、读取边界和短期 capability 已在本地合成 ERP 与真实双用户只读链路中验证；共享演示身份不代表个人 ERPNext 权限验收，写入仍关闭。
@@ -26,7 +30,7 @@ Web Agent Chat 与灰白视觉的实现、验证及边界见 [Web 会话记录](
 
 当前新增身份与权限设计：[ERP MCP 与 EBAC](erp-mcp-ebac.md)，以及配套的[ERP MCP 工具目录](erp-mcp-tools.md)。身份权限先于 ERP 写入实现；当前 ERP 只读工具已接入工具级 EBAC，支持无任务/任务绑定 MCP capability，并通过 `erp_connections` / `erp_identity_bindings` 绑定演示用户的个人凭据引用。正式凭据服务、目标生产 ERPNext 复核和受控写入仍待验收。下一阶段按[ERP MCP 下一阶段设计](erp-mcp-next-phase.md)推进只读生产化、业务推演和受控写入。
 
-业务基础已实现：分域 API、PostgreSQL、身份、案件、方案版本、审批幂等、事务审计、Web 对话保存与 Cube 实例生命周期。JCode 源码已固定引入，其 PostgreSQL 存储补丁在真实模型循环与主机进程重启中通过验证。Cube 内外两种方案的[调研记录](../../../architecture/cube-runtime-placement.md)已落盘；OpenViking 真实检索、Cube 常驻 Harness 或生产部署验收仍未完成。
+业务基础已实现：分域 API、PostgreSQL、身份、案件、方案版本、审批幂等、事务审计、Web 对话保存与 Cube 实例生命周期。JCode 源码已固定引入，其 PostgreSQL 存储补丁在真实模型循环与主机进程重启中通过验证。Cube v0.7.2 常驻 Runtime Bridge 已完成真实合成案件首轮、同案件续轮和 API/Worker 重启后续轮；两个案件使用独立实例和会话。暂停/重建恢复、并发容量、OpenViking 检索和生产部署验收仍未完成，见[常驻运行时记录](cube-resident-runtime.md)。Cube 内外两种方案的[调研记录](../../../architecture/cube-runtime-placement.md)已落盘。
 
 2026-09-22：Rust API 源码改为目录驱动的领域模块。`services/api/src` 下每个领域以目录和 `mod.rs` 作为边界，避免继续按根目录函数文件扩张。2026-09-23 按 Rust 服务测试惯例进一步将路由和生命周期移入 `lib.rs`，`main.rs` 只保留 executable 委托。
 

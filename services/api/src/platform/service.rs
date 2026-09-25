@@ -113,7 +113,7 @@ impl IntoResponse for Error {
 }
 impl From<tokio_postgres::Error> for Error {
     fn from(e: tokio_postgres::Error) -> Self {
-        eprintln!("Database failure: {:?}", e.code());
+        eprintln!("Database failure: code={:?} message={e}", e.code());
         Self(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",
@@ -172,9 +172,7 @@ impl App {
             host: env("API_HOST", "127.0.0.1"),
             port: env("API_PORT", "3100").parse()?,
             model_key,
-            http: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(8))
-                .build()?,
+            http: reqwest::Client::builder().build()?,
             passwords: Arc::new(tokio::sync::Semaphore::new(4)),
             attempts: Default::default(),
             bucket,
@@ -312,6 +310,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("../../migrations/20260922172345_add_business_tool_approvals.sql"),
     ),
     (
+        "20260924150000_release_cube_provider_ids",
+        include_str!("../../migrations/20260924150000_release_cube_provider_ids.sql"),
+    ),
+    (
         "20260923043557_add_context_usage",
         include_str!("../../migrations/20260923043557_add_context_usage.sql"),
     ),
@@ -338,6 +340,22 @@ const MIGRATIONS: &[(&str, &str)] = &[
     (
         "20260924120000_create_mcp_sessions",
         include_str!("../../migrations/20260924120000_create_mcp_sessions.sql"),
+    ),
+    (
+        "20260924123000_add_cube_runtime_session",
+        include_str!("../../migrations/20260924123000_add_cube_runtime_session.sql"),
+    ),
+    (
+        "20260924130000_version_personal_memory",
+        include_str!("../../migrations/20260924130000_version_personal_memory.sql"),
+    ),
+    (
+        "20260924133000_add_memory_audit_events",
+        include_str!("../../migrations/20260924133000_add_memory_audit_events.sql"),
+    ),
+    (
+        "20260924160000_create_knowledge_embedding_jobs",
+        include_str!("../../migrations/20260924160000_create_knowledge_embedding_jobs.sql"),
     ),
 ];
 const LEGACY_MIGRATION_IDS: &[(&str, &str)] = &[
@@ -373,6 +391,10 @@ const LEGACY_MIGRATION_IDS: &[(&str, &str)] = &[
     (
         "018_business_tool_approvals",
         "20260922172345_add_business_tool_approvals",
+    ),
+    (
+        "019_release_cube_provider_ids",
+        "20260924150000_release_cube_provider_ids",
     ),
 ];
 pub async fn migrate(app: &App) -> Result<()> {

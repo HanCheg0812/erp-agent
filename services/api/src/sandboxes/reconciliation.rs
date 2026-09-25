@@ -1,9 +1,29 @@
 use super::{
+    lifecycle::cube_allow_out,
     provider::{call, configured, matches, remote_id, unavailable},
     repository::{ROW, save},
 };
 use crate::{auth::Principal, platform::*};
 use serde_json::{Value, json};
+
+async fn release_leases(db: &tokio_postgres::Client, row: &Value) -> Result<()> {
+    let session = row["session_id"].as_str().unwrap_or_default();
+    if !session.is_empty() {
+        db.execute(
+            "UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1",
+            &[&session],
+        )
+        .await?;
+    }
+    if let Some(mcp) = row["mcp_session_id"].as_str() {
+        db.execute(
+            "UPDATE mcp_sessions SET revoked_at=now(),updated_at=now() WHERE id=$1 AND revoked_at IS NULL",
+            &[&mcp],
+        )
+        .await?;
+    }
+    Ok(())
+}
 async fn reconcile_inner(
     app: &App,
     db: &mut deadpool_postgres::Object,
@@ -43,8 +63,9 @@ async fn reconcile_inner(
         row = save(db, actor, &row, json!({"sandbox_id":id})).await?;
     }
     let path = format!("/sandboxes/{}", row["sandbox_id"].as_str().unwrap());
-    let remote = call(app, &path, reqwest::Method::GET, None).await?;
+    let mut remote = call(app, &path, reqwest::Method::GET, None).await?;
     if remote.is_null() {
+        release_leases(&***db, &row).await?;
         return save(
             db,
             actor,
@@ -53,7 +74,15 @@ async fn reconcile_inner(
         )
         .await;
     }
-    if !matches(&remote, &row) {
+    let paused = remote["state"]
+        .as_str()
+        .is_some_and(|state| state.eq_ignore_ascii_case("paused"));
+    let mut reconnect_pending = row["error_code"] == "resume_reconnect_pending";
+    // The provider scope was strictly checked before the sandbox ID was
+    // persisted. Cube v0.7.2 can omit metadata on an already-bound sandbox
+    // while it transitions through pause/resume, so only a supplied metadata
+    // object can contradict the persisted scope here.
+    if remote["metadata"].is_object() && !matches(&remote, &row) {
         return save(
             db,
             actor,
@@ -61,6 +90,39 @@ async fn reconcile_inner(
             json!({"guest_ready":false,"error_code":"scope_mismatch"}),
         )
         .await;
+    }
+    // Cube drops guest-initiated outbound sockets on pause. Persist the reset
+    // requirement before resuming so a retry can rebuild JCode's connections.
+    if paused {
+        row = save(
+            db,
+            actor,
+            &row,
+            json!({"guest_ready":false,"error_code":"resume_reconnect_pending"}),
+        )
+        .await?;
+        reconnect_pending = true;
+        call(
+            app,
+            &format!("{path}/resume"),
+            reqwest::Method::POST,
+            Some(json!({})),
+        )
+        .await?;
+        remote = call(app, &path, reqwest::Method::GET, None).await?;
+        // Cube may omit metadata while a paused guest transitions back to
+        // running. The sandbox ID was scope-checked immediately before the
+        // resume request, so only reject a response that supplies and
+        // contradicts metadata; a transiently absent object is acceptable.
+        if remote.is_null() || (remote["metadata"].is_object() && !matches(&remote, &row)) {
+            return save(
+                db,
+                actor,
+                &row,
+                json!({"guest_ready":false,"error_code":"scope_mismatch"}),
+            )
+            .await;
+        }
     }
     if row["state"] == "releasing" || row["expired"] == true {
         row = save(
@@ -77,6 +139,7 @@ async fn reconcile_inner(
         {
             return save(db, actor, &row, json!({"error_code":"release_pending"})).await;
         }
+        release_leases(&***db, &row).await?;
         return save(
             db,
             actor,
@@ -85,26 +148,59 @@ async fn reconcile_inner(
         )
         .await;
     }
+    if reconnect_pending {
+        call(
+            app,
+            &format!("{path}/network"),
+            reqwest::Method::PUT,
+            Some(json!({"allowInternetAccess":false,"allowOut":cube_allow_out()?})),
+        )
+        .await?;
+    }
     let mut healthy = false;
-    if let Ok(proxy) = std::env::var("CUBE_PROXY_URL") {
-        let url = format!(
-            "{}/sandbox/{}/49999/health",
-            proxy.trim_end_matches('/'),
-            row["sandbox_id"].as_str().unwrap()
-        );
-        if let Ok(r) = app
-            .http
-            .get(url)
-            .timeout(std::time::Duration::from_secs(3))
-            .send()
-            .await
-        {
-            if r.status().is_success() {
-                healthy = r.json::<Value>().await.is_ok_and(|v| v == "OK")
+    if std::env::var("CUBE_PROXY_URL").is_ok() {
+        let resident = super::bridge::enabled();
+        let route = if resident { "/health/ready" } else { "/health" };
+        if let Ok(url) = super::bridge::guest_url(row["sandbox_id"].as_str().unwrap(), route) {
+            if let Ok(r) = app
+                .http
+                .get(url)
+                .timeout(std::time::Duration::from_secs(3))
+                .send()
+                .await
+            {
+                if r.status().is_success() {
+                    healthy = r.json::<Value>().await.is_ok_and(|v| {
+                        if resident {
+                            v["status"] == "ready" && v["warmup"] != true
+                        } else {
+                            v == "OK"
+                        }
+                    });
+                }
             }
         }
     }
-    save(db,actor,&row,json!({"state":"provisioned","provider_state":remote["state"],"guest_ready":healthy,"error_code":if healthy{Value::Null}else{json!("guest_unavailable")}})).await
+    if reconnect_pending && healthy {
+        let url = super::bridge::guest_url(row["sandbox_id"].as_str().unwrap(), "/v1/reconnect")?;
+        let token = super::bridge::token_for(uuid(row["id"].as_str().unwrap())?)?;
+        healthy = app
+            .http
+            .post(url)
+            .header("x-agent-runtime-token", token)
+            .timeout(std::time::Duration::from_secs(3))
+            .send()
+            .await
+            .is_ok_and(|response| response.status().is_success());
+    }
+    let error_code = if healthy {
+        Value::Null
+    } else if reconnect_pending {
+        json!("resume_reconnect_pending")
+    } else {
+        json!("guest_unavailable")
+    };
+    save(db,actor,&row,json!({"state":"provisioned","provider_state":remote["state"],"guest_ready":healthy,"error_code":error_code})).await
 }
 pub(super) async fn reconcile(
     app: &App,
@@ -127,7 +223,7 @@ pub(super) async fn reconcile(
                 db,
                 actor,
                 &latest,
-                json!({"error_code":"cube_unavailable","guest_ready":false}),
+                json!({"error_code":if latest["error_code"] == "resume_reconnect_pending" {"resume_reconnect_pending"} else {"cube_unavailable"},"guest_ready":false}),
             )
             .await
         }

@@ -12,9 +12,15 @@ pub(super) async fn save(
     for (k, v) in patch.as_object().unwrap() {
         next[k] = v.clone()
     }
+    // A released operation is historical bookkeeping only. Do not keep the
+    // provider id reserved, because Cube can assign that id to a later
+    // sandbox and `sandbox_id` is globally unique in PostgreSQL.
+    if next["state"] == "released" {
+        next["sandbox_id"] = Value::Null;
+    }
     let tx = db.transaction().await?;
     let id = uuid(row["id"].as_str().unwrap())?;
-    let saved=object(&*tx,&format!("UPDATE case_sandboxes s SET sandbox_id=$2,state=$3,provider_state=$4,guest_ready=$5,error_code=$6,checked_at=now() WHERE id=$1 RETURNING {ROW}"),&[&id,&next["sandbox_id"].as_str(),&next["state"].as_str().unwrap(),&next["provider_state"].as_str(),&next["guest_ready"].as_bool().unwrap_or(false),&next["error_code"].as_str()]).await?;
+    let saved=object(&*tx,&format!("UPDATE case_sandboxes s SET sandbox_id=$2,state=$3,provider_state=$4,guest_ready=$5,error_code=$6,mcp_session_id=$7,checked_at=now() WHERE id=$1 RETURNING {ROW}"),&[&id,&next["sandbox_id"].as_str(),&next["state"].as_str().unwrap(),&next["provider_state"].as_str(),&next["guest_ready"].as_bool().unwrap_or(false),&next["error_code"].as_str(),&next["mcp_session_id"].as_str()]).await?;
     if saved["state"] != row["state"] {
         cases::audit(
             &*tx,

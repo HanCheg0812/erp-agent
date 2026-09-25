@@ -59,7 +59,7 @@ pub async fn insert<C: GenericClient + Sync>(
     let id = new_id();
     let token = auth::token();
     db.execute(
-        "INSERT INTO mcp_sessions(id,tenant_id,owner_id,case_id,run_message_id,token_hash,expires_at) VALUES($1,$2,$3,$4,$5,$6,now()+interval '15 minutes')",
+        "INSERT INTO mcp_sessions(id,tenant_id,owner_id,case_id,run_message_id,token_hash,expires_at) VALUES($1,$2,$3,$4,$5,$6,CASE WHEN $4::uuid IS NOT NULL AND $5::bigint IS NULL THEN now()+interval '8 hours' ELSE now()+interval '15 minutes' END)",
         &[&id, &actor.tenant_id, &actor.user_id, &case_id, &run_message_id, &digest(&token)],
     ).await?;
     Ok((id, token))

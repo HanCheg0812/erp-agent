@@ -13,6 +13,13 @@ pub async fn memories<C: tokio_postgres::GenericClient + Sync>(
 ) -> Result<Vec<Value>> {
     repository::list(db, actor).await
 }
+pub async fn recalled_memories<C: tokio_postgres::GenericClient + Sync>(
+    db: &C,
+    actor: &Principal,
+    query: &str,
+) -> Result<Vec<Value>> {
+    repository::recall(db, actor, query).await
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Memory {
@@ -36,15 +43,17 @@ pub async fn memory_save(app: App, actor: Principal, value: Value) -> Result<(bo
     if repository::count(&tx, &actor).await? >= 50 {
         return Err(Error::bad("Memory limit reached; remove an entry first"));
     }
-    let value = repository::insert(&tx, &actor, input.request_id, text_value).await?;
+    let value = repository::insert(&tx, &actor, input.request_id, text_value, "api").await?;
     tx.commit().await?;
     Ok((true, value))
 }
 pub async fn memory_delete(app: App, actor: Principal, id: Uuid) -> Result<()> {
-    let db = app.db.get().await?;
-    if !repository::delete(&**db, &actor, id).await? {
+    let mut db = app.db.get().await?;
+    let tx = db.transaction().await?;
+    if !repository::retract(&tx, &actor, id).await? {
         return Err(Error::missing());
     }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -60,6 +69,6 @@ pub(crate) async fn save_agent_memory_tx(
     if repository::count(tx, actor).await? >= 50 {
         return Err(Error::conflict("memory_limit"));
     }
-    repository::insert(tx, actor, id, value.trim()).await?;
+    repository::insert(tx, actor, id, value.trim(), "agent").await?;
     Ok(json!({"status":"saved","memory_id":id,"text":value.trim()}))
 }

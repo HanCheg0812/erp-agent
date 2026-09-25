@@ -1,18 +1,30 @@
 # Local Cube Operations
 
-Verified on 2026-09-22 against the existing installation in
-`/usr/local/services/cubetoolbox`. This recovers a local installation; it is not a fresh
-deployment recipe or acceptance of the JCode runtime.
+The local installation in `/usr/local/services/cubetoolbox` was repaired on
+2026-09-22 and upgraded to v0.7.2 on 2026-09-25. This is an observed local
+configuration, not a fresh deployment recipe or production acceptance.
 
 ## Observed Versions and Endpoints
 
-- Cube API v0.4.0, commit `4004a6ec34a9d045a9789a1fd438d6518eedb3d3`.
-- Installed custom Cubelet 0.0.0-dev, commit `15ad2ac8d993d70ccaa8f3137f260450799ea344`.
+- Current Cube CLI/API package: v0.7.2. The previous v0.4.0 API and custom
+  Cubelet 0.0.0-dev are historical and no longer the active installation.
 - API: `http://127.0.0.1:3001`; node inventory: `/cubeapi/v1/nodes` on that API.
 - CubeMaster: port 8089; proxy: host ports 80/443; guest health: port 49999.
 - Active node IP: `192.168.100.122` at verification time. Recheck before reusing scripts.
-- Project template: `tpl-erp-agent-base-20260921`, READY on the healthy current node.
-  This is a lightweight code-interpreter base; JCode and Bridge are not installed.
+- Current resident template: `tpl-00f062671d894be6808685fa`, READY on the
+  local node. The older `tpl-erp-agent-base-20260921` is only a lightweight base.
+
+The local Cube configuration has `CUBE_SANDBOX_MINIO_ENABLED=0`,
+`CUBE_ARTIFACT_STORE_BACKEND=fs`, and `CUBE_OPS_STORE_BACKEND=fs`. Cube's
+one-click installer defaults to MinIO for S3-compatible volumes, but template
+artifacts and CubeOps can use filesystem storage. This setup uses no Cube S3
+volumes, so MinIO is not required. Forge originals are stored separately in
+RustFS; JCode session state is stored in PostgreSQL. Cube S3 volumes would
+require MinIO or another S3-compatible service.
+The MinIO systemd unit is masked and no MinIO container is running. Its stale
+`failed` state records an upgrade-time attempt to start without a password;
+it is not an active dependency failure. Cube API, CubeOps and the resident
+template remain healthy with the filesystem backends above.
 
 ## Faults and Recovery
 
@@ -53,6 +65,28 @@ startup and every 30 seconds. If that process is stopped, cleanup waits for rest
 this is not a provider-level TTL guarantee. Uncertain create/delete results are retained
 and reconciled without blindly creating replacements.
 
-Next runtime work is a JCode/Bridge template, dedicated model configuration, scoped tools
-and PostgreSQL recovery acceptance. Cold/warm model startup, TTFT, mixed workloads and
-Harness placement comparisons have not been measured.
+The JCode/Bridge guest contract is in
+[agent-template](agent-template/README.md): it builds an Ubuntu 24.04 resident HTTP
+service with `/health/live`, `/health/ready` and authenticated `/v1/turn`. In
+`AGENT_RUNTIME_MODE=resident`, the first turn initializes an in-process JCode Agent
+and subsequent turns reuse it; the default stdin/stdout path remains available for
+rollback. The previous v0.4.0 CubeVS prevented guest traffic to the host's own
+LAN IP. After upgrading to v0.7.2 and rebuilding the resident template, a real
+JCode/DeepSeek first turn and a later turn after API/Worker restart completed
+inside the same Cube instance and PostgreSQL session. A second synthetic case
+used a separate instance/session. Both completed ERP list/read tools;
+OpenViking returned its expected unconfigured-service error. The resident
+Bridge now sends `skill_catalog` before every turn, matching the Worker's
+per-run validation. See [the resident runtime plan](../../docs/plantree/plans/server-demo/cube-resident-runtime.md)
+for IDs, failures, and remaining acceptance work. A synthetic JCode pause/resume
+and recreate lifecycle now passes twice on the current template. Multiple
+pause/resume cycles on one instance,
+simultaneous business load, model TTFT, and placement comparisons remain
+unmeasured. This Cube v0.7.2 setup requires the guest DNS resolver IPv4 address
+in `CUBE_DNS_RESOLVER` (default `169.254.254.53`) so a restricted sandbox can
+still resolve domain allow rules after pause/resume.
+
+Cube v0.7.2 rewrites non-presigned HTTP template artifact URLs to the
+CubeMaster host. The current single-node template build staged its ext4
+artifact in the node image directory before registration; this is not a
+multi-node artifact distribution procedure.

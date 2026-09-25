@@ -9,6 +9,8 @@ publish = false
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
+dotenvy = "0.15"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
@@ -16,7 +18,9 @@ calamine = "0.36.1"
 quick-xml = "0.42.0"
 zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
 tempfile = "3"
-tokio = { version = "1", features = ["process", "time", "fs", "rt"] }
+tokio = { version = "1", features = ["process", "time", "fs", "rt", "rt-multi-thread", "macros", "signal"] }
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-serde_json-1"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }

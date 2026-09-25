@@ -1,6 +1,6 @@
 # JCode 放在 Cube 内还是外
 
-调研日期：2026-09-21。状态：设计建议，尚未运行 JCode + Cube 对照测试。
+调研日期：2026-09-21。状态：设计建议；截至 2026-09-24，本地 resident Runtime Bridge 已实现，尚未运行真实 JCode + Cube 对照测试。
 
 结论：两种方式均有 Cube 官方示例。结合本项目保留 JCode 完整 Harness、会话状态和案件文件的选择，优先验证“JCode + 常驻 Bridge 在 Cube 内”；保留外部运行作为性能对照。最终位置由隔离需求、恢复正确性和实测开销决定，不把之前架构图中的位置当作不可修改的决定。
 
@@ -91,4 +91,4 @@ OpenViking/MinerU 保持独立服务。入库任务由持久队列和 Worker 处
 
 ## 6. 当前实施事实
 
-已实现 PostgreSQL 上的身份、案件、方案、审批、审计 API，已引入 JCode submodule。尚未实现 Runtime Bridge、JCode 业务 Prompt 接入、Cube 模板、ERP MCP、知识库集成、异步解析或 Web。以上部署与性能比较是下一阶段的验证计划。
+已实现 PostgreSQL 上的身份、案件、方案、审批、审计 API，已引入 JCode submodule，并在 `AGENT_RUNTIME_MODE=resident` 下实现本地 Runtime Bridge：它在进程内复用 JCode Agent、PostgreSQL session、技能目录和 ERP/OpenViking MCP 注册表。真实 Cube 模板注册、API 到 guest 的租约/短期 token 适配、Worker 切换、恢复隔离、知识库索引、异步解析和 Web 端到端验收仍未完成。以上部署与性能比较仍是下一阶段的验证计划。

@@ -64,7 +64,7 @@ pub(super) async fn knowledge(app: &App, call: &Call, roots: Vec<String>) -> Res
     }
     let request = if call.tool == "search_case_knowledge" {
         let (query, limit) = search(call.arguments.clone())?;
-        app.http.post(format!("{}/api/v1/search/find",origin.trim_end_matches('/'))).json(&json!({"query":query,"target_uri":roots,"limit":limit,"context_type":"resource","include_provenance":true}))
+        app.http.post(format!("{}/api/v1/search/find",origin.trim_end_matches('/'))).timeout(std::time::Duration::from_secs(8)).json(&json!({"query":query,"target_uri":roots,"limit":limit,"context_type":"resource","include_provenance":true}))
     } else {
         let uri = read_uri(call.arguments.clone(), &roots)?;
         app.http
@@ -72,6 +72,7 @@ pub(super) async fn knowledge(app: &App, call: &Call, roots: Vec<String>) -> Res
                 "{}/api/v1/content/read",
                 origin.trim_end_matches('/')
             ))
+            .timeout(std::time::Duration::from_secs(8))
             .query(&[("uri", uri), ("limit", "160".into())])
     };
     let request = if let Ok(key) = std::env::var("OPENVIKING_API_KEY") {

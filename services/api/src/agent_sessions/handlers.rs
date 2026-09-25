@@ -29,9 +29,14 @@ pub async fn load(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<Value>> {
-    Ok(Json(
-        storage::load(app, id, crate::auth::bearer(&headers)?).await?,
-    ))
+    let token = crate::auth::bearer(&headers)?;
+    match storage::load(app, id.clone(), token).await {
+        Ok(value) => Ok(Json(value)),
+        Err(error) => {
+            eprintln!("agent session load failed: session={id} error={error}");
+            Err(error)
+        }
+    }
 }
 pub async fn save(
     State(app): State<App>,
@@ -39,9 +44,14 @@ pub async fn save(
     headers: HeaderMap,
     Json(value): Json<Value>,
 ) -> Result<Json<Value>> {
-    Ok(Json(
-        storage::save(app, id, crate::auth::bearer(&headers)?, value).await?,
-    ))
+    let token = crate::auth::bearer(&headers)?;
+    match storage::save(app, id.clone(), token, value).await {
+        Ok(value) => Ok(Json(value)),
+        Err(error) => {
+            eprintln!("agent session save failed: session={id} error={error}");
+            Err(error)
+        }
+    }
 }
 pub async fn document_get(
     State(app): State<App>,

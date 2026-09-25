@@ -19,33 +19,35 @@ use tokio::io::AsyncReadExt;
 mod actions;
 mod business_mcp;
 mod recovery;
+mod resident;
+mod runtime;
 mod skills;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Request {
-    text: String,
+pub(crate) struct Request {
+    pub(crate) text: String,
     #[serde(default)]
-    images: Vec<(String, String)>,
-    new_session: bool,
-    case: Value,
+    pub(crate) images: Vec<(String, String)>,
+    pub(crate) new_session: bool,
+    pub(crate) case: Value,
     #[serde(default = "message_operation")]
-    operation: String,
+    pub(crate) operation: String,
     #[serde(default)]
-    memories: Vec<Value>,
-    approval: String,
+    pub(crate) memories: Vec<Value>,
+    pub(crate) approval: String,
     #[serde(default)]
-    permission_context: Value,
+    pub(crate) permission_context: Value,
     #[serde(default)]
-    resume: bool,
-    effort: String,
+    pub(crate) resume: bool,
+    pub(crate) effort: String,
 }
 fn message_operation() -> String {
     "message".into()
 }
 
-struct CaseRead;
-struct AttachmentRead;
+pub(crate) struct CaseRead;
+pub(crate) struct AttachmentRead;
 
 fn attachment_input(mut input: Value) -> Value {
     if let Some(map) = input.as_object_mut() {
@@ -79,7 +81,9 @@ impl Tool for CaseRead {
 
 #[async_trait]
 impl Tool for AttachmentRead {
-    fn name(&self) -> &str { "attachment_read" }
+    fn name(&self) -> &str {
+        "attachment_read"
+    }
     fn description(&self) -> &str {
         "Read a document belonging to this authorized case. Use a document_id returned by case_read or the current attachment note. For PDF follow next_page and next_offset; page_count (1-4) can retry one page's image. For DOCX, XLSX, MD and TXT follow next_offset; for Word images follow next_image_offset. Repeat while cursors remain. Returns source locations and, for DeepSeek Flash, page/document images. This is read-only and cannot access arbitrary server paths."
     }
@@ -93,9 +97,17 @@ impl Tool for AttachmentRead {
         },"required":["document_id"],"additionalProperties":false})
     }
     async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput> {
-        let mut value = actions::request(reqwest::Method::POST, "attachments/read", Some(attachment_input(input))).await?;
+        let mut value = actions::request(
+            reqwest::Method::POST,
+            "attachments/read",
+            Some(attachment_input(input)),
+        )
+        .await?;
         let images = value["images"].as_array().cloned().unwrap_or_default();
-        value.as_object_mut().context("Invalid attachment result")?.remove("images");
+        value
+            .as_object_mut()
+            .context("Invalid attachment result")?
+            .remove("images");
         let mut output = ToolOutput::new(value.to_string());
         for image in images {
             let kind = image["mime_type"].as_str().context("Image type missing")?;
@@ -155,7 +167,12 @@ fn emit_context_usage(
 
 #[tokio::main]
 async fn main() {
-    if let Err(error) = run().await {
+    let result = if std::env::var("AGENT_RUNTIME_MODE").ok().as_deref() == Some("resident") {
+        resident::run().await
+    } else {
+        run().await
+    };
+    if let Err(error) = result {
         // The API keeps this pipe private and redacts credentials before diagnostics.
         eprintln!("{error:#}");
         let _ = emit(json!({"type":"failed"}));
@@ -186,7 +203,16 @@ async fn run() -> Result<()> {
         .parse()?;
     ensure!(timeout <= 3600, "Invalid turn timeout");
     ensure!(!request.text.trim().is_empty(), "Empty turn");
-    ensure!(request.images.len() <= 4 && request.images.iter().all(|(kind, data)| ["image/png", "image/jpeg", "image/webp"].contains(&kind.as_str()) && data.len() <= 7 * 1024 * 1024), "Invalid image input");
+    ensure!(
+        request.images.len() <= 4
+            && request
+                .images
+                .iter()
+                .all(|(kind, data)| ["image/png", "image/jpeg", "image/webp"]
+                    .contains(&kind.as_str())
+                    && data.len() <= 7 * 1024 * 1024),
+        "Invalid image input"
+    );
     ensure!(
         ["message", "compact"].contains(&request.operation.as_str()),
         "Invalid operation"
@@ -276,7 +302,9 @@ async fn run() -> Result<()> {
     registry
         .register("case_read".into(), Arc::new(CaseRead))
         .await;
-    registry.register("attachment_read".into(), Arc::new(AttachmentRead)).await;
+    registry
+        .register("attachment_read".into(), Arc::new(AttachmentRead))
+        .await;
     registry
         .register("todo".into(), Arc::new(TodoTool::new()))
         .await;

@@ -74,6 +74,10 @@ export async function testMemoryTransaction({ api, db, actor, token, storageToke
   }
   const saved = await api(path, { token: storageToken, method: 'POST', body: call });
   assert.equal(saved.status, 'saved');
+  const savedRow = (await db.query('SELECT status,scope_kind,scope_id,source_kind FROM user_memories WHERE id=$1', [saved.memory_id])).rows[0];
+  assert.deepEqual(savedRow, { status: 'active', scope_kind: 'user', scope_id: actor.userId, source_kind: 'agent' });
+  assert.deepEqual((await db.query('SELECT operation,state FROM memory_outbox WHERE memory_version_id=$1 ORDER BY operation', [saved.memory_id])).rows, []);
+  assert.deepEqual((await db.query('SELECT event_type,payload->>\'source_kind\' AS source_kind FROM memory_audit_events WHERE memory_version_id=$1', [saved.memory_id])).rows, [{ event_type: 'memory.created', source_kind: 'agent' }]);
   assert.deepEqual(await api(path, { token: storageToken, method: 'POST', body: call }), saved);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM user_memories WHERE owner_id=$1 AND text=$2', [actor.userId, call.arguments.text])).rows[0].n, 1);
   const memoryIds = [];

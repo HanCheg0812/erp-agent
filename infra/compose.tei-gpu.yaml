@@ -1,0 +1,4 @@
+services:
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:120-1.9
+    gpus: all

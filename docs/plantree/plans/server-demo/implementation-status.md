@@ -1,5 +1,11 @@
 # Implementation Status
 
+2026-09-24 RAG embedding 基础：新增独立 `services/ingestion-worker` 的 TEI HTTP 客户端和 `embedding-worker` 二进制。PostgreSQL 新增 `knowledge_chunks`、带租约/fencing token/退避的 `knowledge_embedding_jobs`，以及 pgvector `knowledge_chunk_embeddings`；worker 校验文本 SHA-256、模型登记维度并幂等 upsert，绝不消费个人 `memory_outbox`。迁移已在当前 pgvector 本地数据库执行，ingestion-worker 的 9 个单元测试与 5 个 fixture 测试通过。尚未接入真实 TEI、MinerU 产物入队或 OpenViking 发布，因此不把此项称为端到端 RAG 验收。
+
+2026-09-24 本地 TEI 部署配置：Compose 新增独立 `embedding` profile，默认 CPU 镜像、固定 BGE-M3 revision、持久模型缓存及 localhost 端口；另有针对 RTX 50 系列的 GPU 覆盖配置。worker 现在读取 `.env`，启动时核对 TEI 实际模型与 PG 登记值。CPU/GPU Compose 配置校验、worker 编译与 14 项测试通过。本机 GPU 已识别，但 Docker 尚缺 NVIDIA GPU runtime（`--gpus all` 设备驱动不可用）；首次 `npm run embedding:up` 在 GHCR 镜像分层下载缓慢时停止，容器尚未创建，也未下载模型。真实 `/health`、`/info`、`/embed` 和 worker 到服务的链路仍待验证，不把 Compose 配置当成已运行的推理服务。
+
+2026-09-24 Cube resident worker opt-in：Rust API 新增案件级 resident 运行路径。设置 `AGENT_EXECUTION_BACKEND=cube` 后，首条消息透明创建并等待案件绑定的 Cube 实例，向 guest Runtime Bridge 发送 `/v1/turn`；后续消息复用同一 PostgreSQL/JCode session、案件 MCP capability 和 HMAC runtime token。默认 local worker 不变，Cube 释放/回收时撤销相关租约。`cargo check` 与 API 测试通过；真实 resident 模板尚未注册，因此不把此项称为 Cube 端到端验收。
+
 2026-09-24 ERP MCP capability session boundary：新增 PostgreSQL `mcp_sessions`，支持 planner 创建无业务任务的短期 capability，也支持 Worker 为单次运行创建任务绑定 capability；网关按 capability 前缀路由，调用时重新执行 EBAC、全局/任务范围、平台用户 ERPNext 绑定和 ERP 结果校验。恢复运行会撤销旧 capability 后重新申请，主动撤销和 15 分钟过期均拒绝后续调用。隔离系统 fixture 已验证无案件创建、ERP 读取、撤销后 401，以及原有任务范围、ERPNext 403 和 Agent guidance；未执行 ERP 写入。
 
 2026-09-24 ERP MCP Phase A 真实双用户权限交集：在本地 ERPNext v16.35.0 真实 HTTP API 上，用 `planner@example.test -> forge-reader@example.test` 和同租户 `erp-boundary-limited@example.test -> limited-reader@example.test` 完成只读联调。forge 通过 Amazon + `SH-04-GREY-XL` 读到 `SAL-ORD-2026-00003`；limited 通过 Temu + `SH-04-GREY-L` 仅读到 `SAL-ORD-2026-00001`，列表/明细均返回统一 envelope，审计中的 `erp_user` 与 `trace_id` 可对应。limited 读取 Shopee `SAL-ORD-2026-00002` 时 ERPNext 原生 403 被转为 `erp_forbidden`（`retryable=false`、`safe_next_step=ask_erp_admin`）；平台显式 deny 返回 `platform_forbidden`；案件客户超出平台 grant 返回 `erp_scope_missing`。请求使用合成用户/订单，未执行 ERP 写入；正式 Vault/KMS provider、撤销/过期轮换、生产 ERPNext 尚未验收。可重复脚本见[真实 ERP 权限边界验证](../../../../scripts/validate-real-erp-boundary.mjs)。
@@ -40,7 +46,7 @@
 ## Active TODO
 
 1. 按 [解析设计](parser-pipeline-design.md)固定 MinerU/视觉模型接口，实现真实 ParseBackend 和带原文位置的统一产物，以双类合成图片对比解析效果。
-2. 实现文档持久任务与 Rust Worker，消费现有私有原件，再接 OpenViking 及 Rust MCP 网关；验证引用、隔离、失败恢复，并启用相应业务 Skill。
+2. 让解析 Worker 从 RustFS 原件生成 `knowledge_chunks` 并入队，接入真实 TEI 后再接 OpenViking 发布及 Rust MCP 网关；验证引用、隔离、失败恢复，并启用相应业务 Skill。
 3. 按[存储设计](../../../architecture/session-storage.md)验证 Cube 重建恢复，再验证常驻 JCode/Bridge 的双案件隔离、暂停恢复与预热，对照外部 Harness。
 4. 接入 ERPNext，补齐批准后 ERP 状态重验、受控执行及对账；与知识依据合并验收。
 
@@ -49,3 +55,8 @@ API 的登录 `sessions`、Agent 存储 `agent_sessions`、案件输入 `case_co
 本地 API：`http://127.0.0.1:3100`，Web 开发入口见 README。未登录首页只提供邮箱登录/注册；`View demo` 合成入口已移除。有效登录刷新保留；退出及服务端 401 返回登录页并清空账户界面，跨标签页同步的历史验证见 [Rust 验收](rust-auth-context.md)。新账号从空工作区创建首个案件，本地开发凭据在 `.env`。生产部署未做。
 
 Mindloop 专属资源已按授权清理，实测回收约 164 GB，Cube 和其他项目保留，详见[清理记录及明确保留项](mindloop-cleanup.md)。
+# 2026-09-24 云端记忆与 OpenViking 基础
+
+个人记忆的第一版云端化已落地：`user_memories` 兼容保留原 API，同时增加 `scope_kind/scope_id`、`version`、`category`、生命周期状态、来源哈希、有效期和生成式词法列；API/Agent 写入会在同一 PostgreSQL 事务内写入 `memory_audit_events`，个人 embedding outbox 只有在显式开启 `PERSONAL_MEMORY_EMBEDDINGS_ENABLED=1` 时才创建，删除改为 `retracted` 并按同一开关产生 `retract` 任务。Worker 已按当前消息执行 exact、substring 和 `simple` `tsvector` 召回，限制 12 条，并在查询时重新限定租户、用户、作用域、有效期与 active 状态。Compose 已切换并实测 `pgvector/pgvector:pg17-bookworm`，`pg_trgm`、`vector` 扩展和三项记忆迁移在现有 PostgreSQL 卷上成功执行；记忆事务/幂等/容量/隔离/撤回断言通过系统 fixture，Rust API 单测 57 项及 HTTP 测试 3 项通过。
+
+当前尚未把这项基础实现写成完整 RAG 验收：个人记忆没有启用 embedding 模型，文档 RAG 的 `bge-m3` 仅作为登记示例，OpenViking 仍只接收企业知识工具请求，个人记忆不投影到 OpenViking。完整系统回归本轮在 Cube fixture 的固定 `test-sandbox` 唯一键冲突处中止，不能据此宣称全仓 `npm run check` 通过；这不影响上述记忆断言已经在同一回归中的通过结果。

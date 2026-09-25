@@ -1,11 +1,14 @@
+import assert from 'node:assert/strict';
 import pg from 'pg';
 import { randomBytes, randomUUID, scryptSync } from 'node:crypto';
 
-const base = process.env.VALIDATION_API_ORIGIN || 'http://127.0.0.1:3101';
+const base = process.env.VALIDATION_API_ORIGIN || 'http://127.0.0.1:3100';
 const limitedEmail = 'erp-boundary-limited@example.test';
 const limitedPassword = process.env.VALIDATION_LIMITED_PASSWORD || randomBytes(24).toString('base64url');
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
+const runIds = [];
+const lockedCases = [];
 
 const tenant = (await db.query("SELECT id FROM tenants WHERE slug='demo'")).rows[0].id;
 const salt = randomBytes(16).toString('hex');
@@ -85,12 +88,16 @@ async function prepareRun(token, label, customer) {
     expect: 201,
   });
   const caseId = created.body.id;
+  const lockKey = `agent_run:${caseId}`;
+  await db.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [lockKey]);
+  lockedCases.push(lockKey);
   const message = await request(`/v1/cases/${caseId}/conversation/messages`, {
     method: 'POST',
     token,
     body: { client_message_id: randomUUID(), text: `Observed ERP boundary ${label}` },
     expect: 201,
   });
+  runIds.push(message.body.message.id);
   const history = await request(`/v1/cases/${caseId}/conversation`, { token, expect: 200 });
   const claim = await request(`/v1/agent-sessions/${history.body.session_id}/claim`, {
     method: 'POST',
@@ -115,6 +122,7 @@ async function callTool(run, tool, argumentsValue) {
   });
 }
 
+try {
 const plannerToken = await login('planner@example.test', process.env.DEMO_PASSWORD);
 const plannerRun = await prepareRun(plannerToken, 'forge', 'Amazon 渠道客户（演示）');
 const plannerList = await callTool(plannerRun, 'list_erp_orders', {});
@@ -186,4 +194,27 @@ console.log(
     2,
   ),
 );
-await db.end();
+assert.equal(plannerList.status, 200, 'Forge ERP read must succeed');
+assert.equal(plannerList.body?.data?.orders?.length, 1, 'Forge ERP scope must contain one order');
+assert.equal(limitedList.status, 200, 'Limited ERP list must succeed');
+assert.equal(limitedList.body?.data?.orders?.length, 1, 'Limited ERP scope must contain one order');
+assert.equal(limitedRead.status, 200, 'Limited ERP order read must succeed');
+assert.equal(nativeDenied.status, 403, 'ERPNext must deny the other customer order');
+assert.equal(nativeDenied.body?.error, 'erp_forbidden');
+assert.equal(platformDenied.status, 403, 'Platform deny must override the grant');
+assert.equal(platformDenied.body?.error, 'platform_forbidden');
+assert.equal(scopeDenied.status, 403, 'Case scope mismatch must be denied');
+assert.equal(scopeDenied.body?.error, 'erp_scope_missing');
+assert.ok(audit.length > 0, 'ERP tool reads must leave an audit trail');
+} finally {
+  try {
+    if (runIds.length) {
+      await db.query('DELETE FROM agent_runs WHERE message_id=ANY($1::bigint[])', [runIds]);
+    }
+  } finally {
+    for (const lockKey of lockedCases.reverse()) {
+      await db.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [lockKey]);
+    }
+    await db.end();
+  }
+}

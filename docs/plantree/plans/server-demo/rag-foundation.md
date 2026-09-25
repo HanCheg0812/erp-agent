@@ -10,6 +10,8 @@
 
 用户进一步确认 Skill 引导与 Rust 优先，见 [Skill/工具设计](skill-tool-design.md)；多解析器配置继承、父子产物与模型比较见 [解析流水线设计](parser-pipeline-design.md)。聊天附件绑定、JCode 图片输入与知识路径见 [附件设计](chat-attachment-agent-design.md)。首批实现和边界见 [联调记录](skill-parser-integration.md)，以下完整 RAG 职责与接口仍是目标设计。
 
+2026-09-24 补充：[知识检索与长期记忆方案调研](knowledge-memory-research.md)比较 OpenViking、Knowhere 与 PostgreSQL 原生混合检索，并给出长期记忆升级方案及 LLM Wiki 的定位。随后形成的[记忆与 OpenViking 架构](memory-openviking-architecture.md)确定云端边界：PG 负责记忆权威状态与 pgvector，OpenViking 统一负责企业 Resource/Wiki/RAG；PG 资料检索保留为可复现实验基线，不能把实验基线写成已替换 OpenViking 的生产决定。
+
 ## 目标与当前缺口
 
 原始业务主线是客户需求变更分析：读取需求资料，结合 ERP 当前事实，给出有依据的影响分析、方案与人工审批。RAG 负责把适用的资料准确交给 Agent，尤其要区分客户、项目、料号、技术修订、需求修订、生效时间，以及增量/累计/替换总量口径。

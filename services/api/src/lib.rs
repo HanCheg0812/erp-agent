@@ -23,6 +23,64 @@ pub use platform::App;
 use platform::Result;
 use std::sync::Arc;
 
+fn internal_router(app: App) -> Router {
+    Router::new()
+        .route(
+            "/internal/agent-sessions/{id}/case",
+            get(permissions::read_case),
+        )
+        .route(
+            "/internal/agent-sessions/{id}/attachments/read",
+            post(permissions::read_attachment),
+        )
+        .route(
+            "/internal/agent-sessions/{id}",
+            get(agent_sessions::load),
+        )
+        .route(
+            "/internal/agent-sessions/{id}/actions",
+            post(permissions::call),
+        )
+        .route(
+            "/internal/agent-sessions/{id}/deltas",
+            post(agent_sessions::save),
+        )
+        .route(
+            "/internal/agent-sessions/{id}/tools",
+            post(integrations::call),
+        )
+        .route(
+            "/internal/mcp-sessions/{id}/tools",
+            post(integrations::call),
+        )
+        .route(
+            "/internal/agent-sessions/{id}/documents/{kind}",
+            get(agent_sessions::document_get).put(agent_sessions::document_put),
+        )
+        .route(
+            "/health",
+            get(|| async {
+                axum::Json(serde_json::json!({
+                    "status":"ok",
+                    "backend":"rust",
+                    "agent_execution_backend": if sandboxes::bridge::enabled() { "cube" } else { "local" },
+                    "cube_resident_configured": sandboxes::bridge::configured()
+                }))
+            }),
+        )
+        .route("/ready", get(ready))
+        .layer(DefaultBodyLimit::max(8 * 1024 * 1024))
+        .layer(middleware::map_response(
+            |mut response: axum::response::Response| async {
+                response
+                    .headers_mut()
+                    .insert("cache-control", "no-store".parse().unwrap());
+                response
+            },
+        ))
+        .with_state(app)
+}
+
 pub fn router(app: App) -> Router {
     let protected = Router::new()
         .route("/auth/me", get(auth::me))
@@ -101,7 +159,14 @@ pub fn router(app: App) -> Router {
         )
         .route(
             "/health",
-            get(|| async { axum::Json(serde_json::json!({"status":"ok","backend":"rust"})) }),
+            get(|| async {
+                axum::Json(serde_json::json!({
+                    "status":"ok",
+                    "backend":"rust",
+                    "agent_execution_backend": if sandboxes::bridge::enabled() { "cube" } else { "local" },
+                    "cube_resident_configured": sandboxes::bridge::configured()
+                }))
+            }),
         )
         .route("/ready", get(ready))
         .nest(
@@ -147,6 +212,11 @@ pub async fn run() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
     dotenvy::from_filename(".runtime/deepseek.env").ok();
     dotenvy::from_filename(".runtime/integrations.env").ok();
+    // Cube runtime settings are an explicit deployment overlay. They must
+    // override the checked-in local defaults, especially the template ID.
+    if std::env::var("ERP_AGENT_LOAD_CUBE_ENV").as_deref() != Ok("0") {
+        dotenvy::from_filename_override(".runtime/cube.env").ok();
+    }
     let app = App::connect().await?;
     match std::env::args().nth(1).as_deref() {
         Some("migrate") => {
@@ -180,6 +250,16 @@ pub async fn run() -> anyhow::Result<()> {
     platform::ready(&app).await?;
     let routes = router(app.clone());
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", app.host, app.port)).await?;
+    let internal_listener = if let Ok(host) = std::env::var("API_INTERNAL_HOST") {
+        if host.trim().is_empty() {
+            None
+        } else {
+            let port = platform::env("API_INTERNAL_PORT", "3101");
+            Some(tokio::net::TcpListener::bind(format!("{}:{}", host, port)).await?)
+        }
+    } else {
+        None
+    };
     let stop = Arc::new(tokio_util::sync::CancellationToken::new());
     let worker = match platform::env("AGENT_WORKER_ENABLED", "1").as_str() {
         "1" => Some(tokio::spawn(worker::run(
@@ -191,7 +271,15 @@ pub async fn run() -> anyhow::Result<()> {
         _ => anyhow::bail!("AGENT_WORKER_ENABLED must be 0 or 1"),
     };
     let sweeper = tokio::spawn(sandboxes::sweep(app.clone(), stop.clone()));
-    axum::serve(listener, routes)
+    let internal_server = internal_listener.map(|listener| {
+        let internal_stop = stop.clone();
+        tokio::spawn(async move {
+            axum::serve(listener, internal_router(app))
+                .with_graceful_shutdown(internal_stop.as_ref().clone().cancelled_owned())
+                .await
+        })
+    });
+    let result = axum::serve(listener, routes)
         .with_graceful_shutdown(async move {
             shutdown_signal().await;
             stop.cancel();
@@ -202,7 +290,11 @@ pub async fn run() -> anyhow::Result<()> {
             }
             let _ = sweeper.await;
         })
-        .await?;
+        .await;
+    if let Some(server) = internal_server {
+        let _ = server.await;
+    }
+    result?;
     Ok(())
 }
 async fn shutdown_signal() {

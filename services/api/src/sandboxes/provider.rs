@@ -11,7 +11,10 @@ pub(super) async fn call(
     body: Option<Value>,
 ) -> Result<Value> {
     let url = format!("{}{}", env("CUBE_API_URL", "").trim_end_matches('/'), path);
-    let mut request = app.http.request(method.clone(), url);
+    let mut request = app
+        .http
+        .request(method.clone(), url)
+        .timeout(std::time::Duration::from_secs(8));
     if let Ok(key) = std::env::var("CUBE_API_KEY") {
         request = request.header("X-API-Key", key)
     }
@@ -55,7 +58,22 @@ pub(super) async fn preflight(app: &App) -> Result<()> {
         None,
     )
     .await?;
-    let nodes = call(app, "/cubeapi/v1/nodes", reqwest::Method::GET, None).await?;
+    let url = format!(
+        "{}/internal/v1/nodes",
+        env("CUBE_OPS_URL", "http://127.0.0.1:3010").trim_end_matches('/')
+    );
+    let nodes: Value = app
+        .http
+        .get(url)
+        .timeout(std::time::Duration::from_secs(8))
+        .send()
+        .await
+        .map_err(|_| unavailable())?
+        .error_for_status()
+        .map_err(|_| unavailable())?
+        .json()
+        .await
+        .map_err(|_| unavailable())?;
     if !template_ready(&t, &nodes) {
         return Err(Error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -73,9 +91,9 @@ fn template_ready(template: &Value, nodes: &Value) -> bool {
                 replica["status"] == "READY"
                     && nodes.as_array().is_some_and(|nodes| {
                         nodes.iter().any(|node| {
-                            node["healthy"] == true
-                                && node["hostIP"].is_string()
-                                && node["hostIP"] == replica["node_ip"]
+                            node["Healthy"] == true
+                                && node["IP"].is_string()
+                                && node["IP"] == replica["node_ip"]
                         })
                     })
             })
@@ -153,7 +171,7 @@ mod tests {
         }
         let template =
             json!({"status":"READY","replicas":[{"status":"READY","node_ip":"10.0.0.1"}]});
-        let nodes = json!([{"healthy":true,"hostIP":"10.0.0.1"}]);
+        let nodes = json!([{"Healthy":true,"IP":"10.0.0.1"}]);
         assert!(template_ready(&template, &nodes));
         for changed in [
             json!({"status":"BUILDING","replicas":template["replicas"]}),
@@ -164,7 +182,7 @@ mod tests {
         }
         assert!(!template_ready(
             &template,
-            &json!([{"healthy":false,"hostIP":"10.0.0.1"}])
+            &json!([{"Healthy":false,"IP":"10.0.0.1"}])
         ));
     }
 }

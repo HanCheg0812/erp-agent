@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID, randomBytes, scryptSync, createHash } from 'node:crypto';
+import { randomUUID, randomBytes, scryptSync, createHash, createHmac } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -21,7 +21,7 @@ const name = `erp_rust_test_${randomBytes(8).toString('hex')}`;
 await admin.query(`CREATE DATABASE ${name}`);
 const url = new URL(process.env.DATABASE_URL); url.pathname = name;
 const db = new pg.Client({ connectionString: url.href }); await db.connect();
-let child; let second; let logs = ''; let creates = 0; let erpRequests = 0; const erpAuthHeaders = []; let remote = null; let loseCreate = false; let uncertainDelete = false;
+let child; let second; let logs = ''; let creates = 0; let erpRequests = 0; const erpAuthHeaders = []; let remote = null; let loseCreate = false; let uncertainDelete = false; let cubeTurnCompleted = false;
 const originals = originalStorageFixture();
 const cube = createServer(async (req, res) => {
   const chunks = []; for await (const chunk of req) chunks.push(chunk);
@@ -61,9 +61,16 @@ const cube = createServer(async (req, res) => {
   }
   if (req.url.startsWith('/api/v1/content/read')) return res.end(JSON.stringify({result:'Authorized source text'}));
   if (req.url === '/templates/test') return res.end(JSON.stringify({ status: 'READY', replicas: [{ status: 'READY', node_ip: '127.0.0.1' }] }));
-  if (req.url === '/cubeapi/v1/nodes') return res.end(JSON.stringify([{ hostIP: '127.0.0.1', healthy: true }]));
+  if (req.url === '/internal/v1/nodes') return res.end(JSON.stringify([{ IP: '127.0.0.1', Healthy: true }]));
   if (req.url === '/sandboxes' && req.method === 'POST') {
     creates++; const body = JSON.parse(input); remote = { sandboxID: 'test-sandbox', templateID: 'test', state: 'running', metadata: body.metadata };
+    if (env.AGENT_EXECUTION_BACKEND === 'cube') {
+      assert.equal(body.allow_internet_access, false);
+      assert(Array.isArray(body.network?.allow_out));
+      assert(body.network.allow_out.includes('api.deepseek.com'));
+      assert.equal(body.cube_network_config, undefined);
+      assert.equal(body.envVars, undefined);
+    }
     if (loseCreate) return req.socket.destroy();
     return res.end(JSON.stringify(remote));
   }
@@ -73,13 +80,39 @@ const cube = createServer(async (req, res) => {
     if (!remote) res.statusCode = 404;
     return res.end(JSON.stringify(remote));
   }
+  if (req.url === '/sandbox/test-sandbox/49999/health/ready') return res.end(JSON.stringify({ status: 'ready', mode: 'resident', warmup: false }));
+  if (req.url === '/sandbox/test-sandbox/49999/v1/configure') {
+    assert.equal(req.method, 'POST');
+    const config = JSON.parse(input).env;
+    assert.equal(config.CUBE_TEMPLATE_WARMUP, '0');
+    assert.equal(config.AGENT_RUNTIME_MODE, 'resident');
+    assert(config.JCODE_MCP_SESSION_ID.startsWith('mcp_'));
+    return res.end(JSON.stringify({ status: 'ready' }));
+  }
+  if (req.url === '/sandbox/test-sandbox/49999/v1/turn') {
+    const request = JSON.parse(input);
+    const expected = createHmac('sha256', env.CUBE_RUNTIME_SHARED_SECRET).update('erp-agent/cube-runtime/v1/').update(Buffer.from(remote.metadata.erp_operation.replaceAll('-', ''), 'hex')).digest('hex');
+    assert.equal(req.headers['x-agent-runtime-token'], expected);
+    assert.equal(request.case.id, remote.metadata.erp_case);
+    assert.equal(request.new_session, true);
+    res.setHeader('content-type', 'application/x-ndjson');
+    const source = 'Synthetic test guidance';
+    const snapshot = JSON.stringify({ schema_version: 1, id: 'test@1', skills: [{ id: 'test-review', version: '1.0.0', source, sha256: createHash('sha256').update(source).digest('hex') }] });
+    res.write(`${JSON.stringify({ type: 'skill_catalog', snapshot, hash: createHash('sha256').update(snapshot).digest('hex') })}\n`);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    res.write(`${JSON.stringify({ type: 'text_delta', text: 'Streamed from Cube' })}\n`);
+    await new Promise(resolve => setTimeout(resolve, 650));
+    res.end(`${JSON.stringify({ type: 'completed' })}\n`);
+    cubeTurnCompleted = true;
+    return;
+  }
   if (req.url.endsWith('/health')) return res.end(JSON.stringify('OK'));
   res.statusCode = 404; res.end('{}');
 });
 cube.listen(0, '127.0.0.1'); await once(cube, 'listening');
 const listener = createServer(); listener.listen(0, '127.0.0.1'); await once(listener, 'listening'); const port = listener.address().port; await new Promise(resolve => listener.close(resolve));
 const origin = `http://127.0.0.1:${port}`;
-const env = { ...process.env, DATABASE_URL: url.href, API_PORT: String(port), DEEPSEEK_API_KEY: '', ERP_API_TOKEN:'synthetic-erp', ERP_CREDENTIAL_FORGE_READER:'forge-reader-token', ERP_CREDENTIAL_LIMITED_READER:'limited-reader-token', ERP_API_URL:`http://127.0.0.1:${cube.address().port}`, ERP_SHARED_DEMO_MODE:'true', OPENVIKING_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_API_KEY:'', CUBE_API_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_PROXY_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_TEMPLATE_ID: 'test' };
+const env = { ...process.env, ERP_AGENT_LOAD_CUBE_ENV:'0', API_INTERNAL_HOST:'', DATABASE_URL: url.href, API_PORT: String(port), DEEPSEEK_API_KEY: '', ERP_API_TOKEN:'synthetic-erp', ERP_CREDENTIAL_FORGE_READER:'forge-reader-token', ERP_CREDENTIAL_LIMITED_READER:'limited-reader-token', ERP_API_URL:`http://127.0.0.1:${cube.address().port}`, ERP_SHARED_DEMO_MODE:'true', OPENVIKING_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_API_KEY:'', CUBE_API_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_OPS_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_PROXY_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_TEMPLATE_ID: 'test' };
 env.AGENT_MAX_CONCURRENT_RUNS = '4';
 env.RUSTFS_ENDPOINT=`http://127.0.0.1:${cube.address().port}`;
 env.RUSTFS_BUCKET='fixture-originals'; env.RUSTFS_ACCESS_KEY='synthetic'; env.RUSTFS_SECRET_KEY='synthetic-test-only';
@@ -529,6 +562,39 @@ try {
   assert.equal(recoveredCompact.operation, 'compact'); assert.deepEqual(recoveredCompact.response.compactions, compacted.compactions);
   note('compaction isolation, operation idempotency, failure without false success, and metrics after restart');
 
+  await stop();
+  env.AGENT_EXECUTION_BACKEND = 'cube';
+  env.CUBE_RUNTIME_SHARED_SECRET = 'synthetic-cube-runtime-secret-with-32-chars';
+  loseCreate = false;
+  cubeTurnCompleted = false;
+  await start();
+  const cubeCase = await api('/cases', { token: a, method: 'POST', body: create, status: 201 });
+  const beforeCubeCreates = creates;
+  const cubeMessage = await api(`/cases/${cubeCase.id}/conversation/messages`, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'cube streaming' }, status: 201 });
+  let cubePartial;
+  for (let i = 0; i < 400; i++) {
+    cubePartial = (await db.query('SELECT state,text,first_token_at FROM agent_runs WHERE message_id=$1', [cubeMessage.message.id])).rows[0];
+    if (cubePartial?.text) break;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  const cubeState = await db.query('SELECT state,guest_ready,error_code FROM case_sandboxes WHERE case_id=$1 ORDER BY created_at DESC LIMIT 1', [cubeCase.id]);
+  assert.equal(cubePartial?.text, 'Streamed from Cube', `${JSON.stringify({ run: cubePartial, sandbox: cubeState.rows[0], created: creates - beforeCubeCreates })}\n${logs}`);
+  assert.equal(cubePartial.state, 'running');
+  assert(cubePartial.first_token_at);
+  assert.equal(cubeTurnCompleted, false);
+  const cubeResult = await finished(cubeCase.id, cubeMessage.message.id);
+  assert.equal(cubeResult.state, 'completed');
+  assert.equal(cubeResult.text, 'Streamed from Cube');
+  assert.equal(creates, beforeCubeCreates + 1);
+  const cubeSandbox = (await api(`/cases/${cubeCase.id}/sandbox`, { token: a })).operation;
+  assert.equal(cubeSandbox.guest_ready, true);
+  assert.equal((await db.query('SELECT mcp_session_id FROM case_sandboxes WHERE id=$1', [cubeSandbox.id])).rows[0].mcp_session_id.startsWith('mcp_'), true);
+  await api(`/cases/${cubeCase.id}/sandbox/${cubeSandbox.id}`, { token: a, method: 'DELETE' });
+  await stop();
+  env.AGENT_EXECUTION_BACKEND = 'local';
+  await start();
+  note('Cube worker opt-in auto-provisions a case resident and saves streamed text before completion');
+
   await stop(); env.DEEPSEEK_API_KEY = ''; await start();
   const denied = await api(runPath, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'revoked' }, status: 201 });
   await db.query('INSERT INTO agent_runs(message_id,tenant_id,case_id) VALUES($1,$2,$3)', [denied.message.id, actor.tenantId, runCase.id]);
@@ -538,6 +604,9 @@ try {
   assert.equal((await db.query('SELECT skill_catalog_hash FROM agent_runs WHERE message_id=$1', [denied.message.id])).rows[0].skill_catalog_hash, null);
   note('queued work rechecks authorization before invoking the runtime');
   await api(`/memory/${memory.id}`, { token: a, method: 'DELETE', status: 204 });
+  assert.equal((await db.query('SELECT status FROM user_memories WHERE id=$1', [memory.id])).rows[0].status, 'retracted');
+  assert.deepEqual((await db.query("SELECT operation,state FROM memory_outbox WHERE memory_version_id=$1 AND operation='retract'", [memory.id])).rows, []);
+  assert.deepEqual((await db.query("SELECT event_type FROM memory_audit_events WHERE memory_version_id=$1 ORDER BY id", [memory.id])).rows, [{ event_type: 'memory.created' }, { event_type: 'memory.retracted' }]);
   await api('/auth/logout', { token: a, method: 'POST', status: 204 }); await api('/auth/me', { token: a, status: 401 });
   note('logout revocation and scoped memory deletion');
 } finally {

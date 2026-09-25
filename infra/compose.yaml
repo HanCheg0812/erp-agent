@@ -1,7 +1,7 @@
 name: erp-agent
 services:
   postgres:
-    image: postgres:17.6-bookworm
+    image: pgvector/pgvector:pg17-bookworm
     command: ["postgres", "-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-200}"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?Run npm run dev:init}
@@ -35,6 +35,26 @@ services:
       timeout: 3s
       retries: 30
     restart: unless-stopped
+  tei:
+    profiles: [embedding]
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
+    command:
+      - --model-id
+      - ${TEI_MODEL_ID:-BAAI/bge-m3}
+      - --revision
+      - ${TEI_MODEL_REVISION:-5617a9f61b028005a4858fdac845db406aefb181}
+      - --max-client-batch-size
+      - "16"
+      - --max-concurrent-requests
+      - "32"
+      - --max-batch-tokens
+      - "4096"
+    ports:
+      - "127.0.0.1:${TEI_PORT:-8080}:80"
+    volumes:
+      - tei-model-cache:/data
+    restart: unless-stopped
 volumes:
   postgres-data:
   rustfs-data:
+  tei-model-cache:

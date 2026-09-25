@@ -44,4 +44,4 @@ Web 用紧凑、可键盘展开的思考区呈现这些片段，具体工具调�
 
 原生接口工具探针发现：当前 thinking 模式不支持强制选择指定 `tool_choice`，返回 400；正常自动工具选择以及函数结果继续请求均返回 200。产品路径使用自动工具选择。接口依据：[官方 Responses 指南](https://api-docs.deepseek.com/guides/responses_api/)、[创建响应契约](https://api-docs.deepseek.com/api/create-response/)。
 
-当前 Harness 位于宿主机独立进程，Cube 只完成案件实例生命周期，尚未承载 JCode/Bridge。单 Worker 同时执行一个回合，默认无总时限（可通过 `AGENT_TURN_TIMEOUT_SECONDS` 显式设置），输出预算 4096 tokens。流式正文检查点、断流/强杀恢复和超过 150 秒的受控回合已通过；Cube 常驻与重建恢复、ERP/知识 MCP、取消交互、预热和混合负载仍待验证。
+当前生产回归基线仍是宿主机独立进程；Cube resident Runtime Bridge 已接入 Worker 的显式 `AGENT_EXECUTION_BACKEND=cube` 路径，首条消息自动创建案件实例，后续复用同一常驻 JCode/Bridge。默认仍是本地独立进程，避免未注册模板时静默切换。单 Worker 同时执行一个回合，默认无总时限（可通过 `AGENT_TURN_TIMEOUT_SECONDS` 显式设置），输出预算 4096 tokens。流式正文检查点、断流/强杀恢复和超过 150 秒的受控回合已通过；真实 Cube 模板注册与重建恢复、ERP/知识 MCP 端到端回合、取消交互、预热和混合负载仍待验证。
