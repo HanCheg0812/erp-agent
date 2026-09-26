@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useStreamingText } from '@astryxdesign/core/hooks';
-import { BookOpen, Brain, Check, ChevronDown, ClipboardCheck, Database, FileText, ListChecks, LoaderCircle, RotateCcw, Search, X } from 'lucide-react';
+import { BookOpen, Brain, Check, ChevronDown, ClipboardCheck, Database, FileText, ListChecks, LoaderCircle, Monitor, RotateCcw, Search, X } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AgentResponse, AgentStep, CompactionEvent, ProposalInput, ToolPermission } from '../../../packages/contracts/src/index';
@@ -16,6 +16,7 @@ const toolLabels: Record<string, { label: string; Icon: typeof FileText }> = {
   skill_find: { label: '查找业务指引', Icon: Search },
   skill_manage: { label: '读取业务指引', Icon: BookOpen },
   attachment_read: { label: '查看附件', Icon: FileText },
+  bash: { label: '读取运行环境', Icon: Monitor },
   mcp__erp__list_erp_orders: { label: '查看订单', Icon: Database },
   mcp__erp__read_erp_order: { label: '查看订单详情', Icon: Database },
   mcp__openviking__search_case_knowledge: { label: '搜索业务资料', Icon: Search },

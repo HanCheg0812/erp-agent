@@ -1,5 +1,7 @@
 # Implementation Status
 
+2026-09-26 受控环境读取：按用户要求保持本地临时探针开启，默认配置仍关闭。真实 Cube 冷回合完成五条固定只读命令，PostgreSQL 工具原始结果确认 `/home/forge/work`、`forge` UID 10001 和 Ubuntu 24.04.5；暖回合只转述已有结果，不能算第二次执行。Web 以“读取运行环境”展示五条完成记录，刷新和 1440/390/320 px 检查通过。命令、会话标识、开关生效时机和证据见[常驻运行时记录](cube-resident-runtime.md)。
+
 2026-09-24 RAG embedding 基础：新增独立 `services/ingestion-worker` 的 TEI HTTP 客户端和 `embedding-worker` 二进制。PostgreSQL 新增 `knowledge_chunks`、带租约/fencing token/退避的 `knowledge_embedding_jobs`，以及 pgvector `knowledge_chunk_embeddings`；worker 校验文本 SHA-256、模型登记维度并幂等 upsert，绝不消费个人 `memory_outbox`。迁移已在当前 pgvector 本地数据库执行，ingestion-worker 的 9 个单元测试与 5 个 fixture 测试通过。尚未接入真实 TEI、MinerU 产物入队或 OpenViking 发布，因此不把此项称为端到端 RAG 验收。
 
 2026-09-24 本地 TEI 部署配置：Compose 新增独立 `embedding` profile，默认 CPU 镜像、固定 BGE-M3 revision、持久模型缓存及 localhost 端口；另有针对 RTX 50 系列的 GPU 覆盖配置。worker 现在读取 `.env`，启动时核对 TEI 实际模型与 PG 登记值。CPU/GPU Compose 配置校验、worker 编译与 14 项测试通过。本机 GPU 已识别，但 Docker 尚缺 NVIDIA GPU runtime（`--gpus all` 设备驱动不可用）；首次 `npm run embedding:up` 在 GHCR 镜像分层下载缓慢时停止，容器尚未创建，也未下载模型。真实 `/health`、`/info`、`/embed` 和 worker 到服务的链路仍待验证，不把 Compose 配置当成已运行的推理服务。

@@ -209,6 +209,59 @@ worker 环境并重启后，`/tmp/erp-cube-acceptance/1790319935198/report.json`
 但不构成模型服务的长期吞吐或生产 SLA 承诺。性能归因仍需拆出 DeepSeek、Bridge、
 工具和 Cube 创建时间，并继续观察 PostgreSQL 连接、内存和节点资源。
 
+### 2026-09-26 受控环境读取复测
+
+按用户要求，本地 `.runtime/cube.env` 的 `AGENT_TEMP_BASH_PROBE` 改为
+`1`，重启 API 和八个 Worker；配置示例仍为 `0`。这只发布五条固定只读命令，
+不会开放通用 shell、环境变量枚举、任意文件读取或写入。前端将此工具显示为
+“读取运行环境”。
+
+当前模板 `tpl-02d04202aa634f329df8d19f`（镜像
+`127.0.0.1:5000/forge-agent-runtime:model-turn-20260926`，750m CPU /
+1024 MiB）通过以下真实 Agent 回合读取 guest 环境：
+
+```sh
+VERIFY_CUBE_COUNT=1 \
+VERIFY_CUBE_OUTPUT=/tmp/erp-cube-acceptance/bash-enabled-live-20260926 \
+VERIFY_CUBE_MATCHED_PROMPT='请调用受限环境探针，依次读取 pwd、id、uname -a、/etc/os-release 和 /proc/1/cgroup。只汇总虚拟环境信息，不要执行其他命令。' \
+node --env-file=.env --env-file=.runtime/cube.env scripts/verify-cube-resident-live.mjs
+```
+
+报告位于 `/tmp/erp-cube-acceptance/bash-enabled-live-20260926/report.json`。
+案件 `55ed610e-e4ab-4f56-9e3b-89140d69cb74` 的冷回合消息 `2205`
+完成且无错误，`agent_runs.tools` 中有五个 `bash:completed`；
+PostgreSQL 会话 `session_4a3f93ac6d1342e788571d310f8a30a8` 的
+`agent_session_entries` 保存了五个工具输入和原始结果：
+
+| 命令 | 实际 guest 输出摘要 |
+| --- | --- |
+| `pwd` | `/home/forge/work` |
+| `id` | `uid=10001(forge) gid=10001(forge) groups=10001(forge)` |
+| `uname -a` | Linux；主机名 `tpl-02d0`；内核 `6.6.1199-0009-03_2.0.1`；`x86_64` |
+| `cat /etc/os-release` | Ubuntu 24.04.5 LTS；`VERSION_ID=24.04`；`noble` |
+| `cat /proc/1/cgroup` | `0::/default/tpl-02d04202aa634f329df8d19f_0/runtime` |
+
+冷回合排队 16 ms、首正文 token 自提交起 2,066 ms、总耗时 7,562 ms，
+工具耗时合计 2,348 ms。暖回合消息 `2206` 完成、总耗时 4,876 ms，
+复用同一 runtime，但工具调用数为零：模型转述了前一轮结果，不能记为
+第二次真实探测。两个回合均为 Cube backend，没有宿主机回退。单样本
+不作为吞吐或 P95 结论。
+
+测试实例 `68a1aba0c43b4361baf609fa09fde195` 已由脚本释放；核对时
+Cube 无存活实例，API `/ready` 正常，九个用户级服务均为 active。
+探针开关在 guest 初始化时读取；重启宿主 API/Worker 不会给已初始化的实例
+热加载工具，后续新建实例才会按新配置加载。本地开关保持开启以满足本次
+环境读取要求；默认配置和通用工具权限边界没有放宽。
+
+Web 检查使用已保存的真实会话，没有再次调用模型：
+`node --env-file=.env /tmp/erp-agent-environment-ui-20260926/verify.mjs`。
+刷新前后均有五条“读取运行环境 / 已完成”记录，正文保留上述 guest 结果；
+1440、390、320 px 的截图、报告和探针脚本位于
+`/tmp/erp-agent-environment-ui-20260926/`。检查未发现横向页面溢出、
+控件越界或浏览器 page error，`npm run typecheck` 和
+`npm run build:web` 通过。本轮不代表通用 Bash、ERP 写入、
+RAG 或生产部署验收。
+
 ## 关键接口约束
 
 - `GET /health/ready`：进程和配置可接收任务后成功；响应中的 `agent_initialized` 必须为 true 才表示该实例已经完成案件绑定、JCode、PostgreSQL session 和受限 MCP 初始化。

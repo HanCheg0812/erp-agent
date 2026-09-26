@@ -32,6 +32,8 @@ Web Agent Chat 与灰白视觉的实现、验证及边界见 [Web 会话记录](
 
 业务基础已实现：分域 API、PostgreSQL、身份、案件、方案版本、审批幂等、事务审计、Web 对话保存与 Cube 实例生命周期。JCode 源码已固定引入，其 PostgreSQL 存储补丁在真实模型循环与主机进程重启中通过验证。Cube v0.7.2 常驻 Runtime Bridge 已完成真实合成案件首轮、同案件续轮和 API/Worker 重启后续轮；两个案件使用独立实例和会话。暂停/重建恢复、并发容量、OpenViking 检索和生产部署验收仍未完成，见[常驻运行时记录](cube-resident-runtime.md)。Cube 内外两种方案的[调研记录](../../../architecture/cube-runtime-placement.md)已落盘。
 
+2026-09-26 环境读取补充：按用户要求，本地固定只读探针现已开启；真实 Cube 执行五条命令并持久化到 PostgreSQL，Web 显示“读取运行环境”。默认配置仍关闭，通用 Bash 仍禁用；复测结果和现存实例的配置生效边界见[常驻运行时记录](cube-resident-runtime.md)。
+
 2026-09-22：Rust API 源码改为目录驱动的领域模块。`services/api/src` 下每个领域以目录和 `mod.rs` 作为边界，避免继续按根目录函数文件扩张。2026-09-23 按 Rust 服务测试惯例进一步将路由和生命周期移入 `lib.rs`，`main.rs` 只保留 executable 委托。
 
 后续按用户反馈完成 [HTTP 与业务职责拆分](api-module-boundaries.md)：8 个业务 HTTP 适配模块不再直接访问数据库或外部服务，案件、会话、工具权限和原件/记忆模块分开用例、规则与 repository。19 项单元/边界测试及本地 PostgreSQL 集成回归通过（原件使用受控 S3 fixture）；其他模块仍有直接 SQL 等后续边界工作，未进行生产部署。
