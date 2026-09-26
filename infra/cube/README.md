@@ -6,6 +6,8 @@ configuration, not a fresh deployment recipe or production acceptance.
 
 ## Observed Versions and Endpoints
 
+- Web UI: `http://127.0.0.1:12088/`; local deployment and login verification
+  are recorded in [the Web UI report](../../docs/plantree/plans/server-demo/cube-webui.md).
 - Current Cube CLI/API package: v0.7.2. The previous v0.4.0 API and custom
   Cubelet 0.0.0-dev are historical and no longer the active installation.
 - API: `http://127.0.0.1:3001`; node inventory: `/cubeapi/v1/nodes` on that API.

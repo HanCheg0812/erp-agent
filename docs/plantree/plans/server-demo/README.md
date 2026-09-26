@@ -4,6 +4,8 @@
 
 当前交接见 [implementation-status](implementation-status.md)，包含已验证能力和最多四项近期任务。
 
+Cube 官方控制台的本地入口、服务托管和监控验证状态见 [Web UI 验证](cube-webui.md)。
+
 输入框的“请求批准 / 帮我批准 / 完全访问”现在按会话持久化到 PostgreSQL；切换会立即 PATCH 当前会话，下一轮由后端注入权威权限上下文，运行中的回合拒绝切换。通用工具授权与业务审批见[通用工具授权与业务审批](approval-workflow.md)。流式中断修复见[原因与验收](stream-recovery-fix.md)。
 
 Web Agent Chat 与灰白视觉的实现、验证及边界见 [Web 会话记录](web-ui.md)。
