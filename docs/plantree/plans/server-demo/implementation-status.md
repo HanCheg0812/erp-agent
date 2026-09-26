@@ -1,6 +1,6 @@
 # Implementation Status
 
-2026-09-26 Cube 多模板工具试点：`cube_quantity_summary` 通过 JCode 受控工具调用另一 Cube 代码模板实例，验证了单次真实模型回合、PostgreSQL 结果/审计、不同实例绑定及删除。最新报告 `/tmp/erp-cube-quantity/1790409061504/report.json`；保存的工具耗时 507 ms，只代表一次本地样本。`npm run check`、Bridge 单测及故障 fixture 通过；模板候选只用于 canary，默认 release 未切换。浏览器/解析模板、并发与跨节点回收仍未验收。设计、命令和失败链路见[模板接入计划](runtime-management.md#2026-09-26-pilot-evidence-and-limits)。
+2026-09-26 Cube 多模板工具复验：`cube_quantity_summary` 通过四轮真实 JCode/Cube 对话，结果、唯一标记回忆、PostgreSQL 审计及独立工具实例删除均正确；第二轮后销毁常驻实例，后两轮从同一 PostgreSQL 会话恢复。工具耗时 447-615 ms；伪造 token 与浏览器 token 均被内部工具端点以 401 拒绝。现有常驻模板另通过四会话冷/暖两轮测试，8/8 回复正确，总响应 P95 为 3,807/1,872 ms；这不是代码工具并发测试。Web 1440/390/320 px 与刷新检查通过，Cube WebUI 和八个 Worker 运行中；557 次资源采样无抓取错误，但 guest 指标仍缺失，工具时间线尚缺安全参数/结果摘要及耗时。报告根目录 `/tmp/erp-cube-quantity-acceptance-20260926/`；模板候选只用于 canary，默认 release 未切换。先前 `npm run check`、Bridge 单测及故障 fixture 通过，本轮仅修改验收脚本和文档。代码工具并发、浏览器/解析模板、历史监控/告警与跨节点回收仍未验收。命令、证据及限制见[模板接入计划](runtime-management.md#2026-09-26-follow-up-acceptance)。
 
 2026-09-26 受控环境读取：按用户要求保持本地临时探针开启，默认配置仍关闭。真实 Cube 冷回合完成五条固定只读命令，PostgreSQL 工具原始结果确认 `/home/forge/work`、`forge` UID 10001 和 Ubuntu 24.04.5；暖回合只转述已有结果，不能算第二次执行。Web 以“读取运行环境”展示五条完成记录，刷新和 1440/390/320 px 检查通过。命令、会话标识、开关生效时机和证据见[常驻运行时记录](cube-resident-runtime.md)。
 

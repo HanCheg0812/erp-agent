@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 Role: scope correction and template interoperability plan
-Status: Bounded code-template tool pilot verified locally; management UI experiment is not the accepted direction
+Status: Bounded code-template tool passed local multi-turn, recreation and Web checks; management UI experiment is not the accepted direction
 
 ## User clarification
 
@@ -17,7 +17,7 @@ The inspected upstream checkout is TencentCloud/CubeSandbox commit `f1aaa737fb38
 | Template role | JCode integration | Current evidence |
 | --- | --- | --- |
 | Forge resident application | JCode and Bridge run inside the template instance; Forge binds and configures a business session | Existing resident implementation and local records; previous experiment report has cleanup limitations below |
-| Code or browser environment | A controlled tool adapter invokes that environment's supported interface; it need not contain JCode | Code-template `cube_quantity_summary` pilot passed a real JCode/Cube turn; browser template remains unintegrated |
+| Code or browser environment | A controlled tool adapter invokes that environment's supported interface; it need not contain JCode | Code-template `cube_quantity_summary` passed four real JCode/Cube turns, instance recreation and Web persistence checks; browser template remains unintegrated |
 | Custom document/utility service | A backend adapter passes scoped inputs to the service, persists outputs outside the sandbox and returns references | Design only; no parser/ingestion acceptance implied |
 | Another Agent application | Requires its own service contract or a derived image with our Harness; its tools and permissions are not automatically inherited | Not integrated |
 
@@ -53,7 +53,7 @@ Current readiness gap: `services/runtime-bridge/src/resident.rs` starts with `ru
 1. Consolidate the existing resident template definition and native Cube creation/inspection path. Retain useful instance identity checks; separate the unaccepted administration experiment without losing its changes or evidence.
 2. Completed for the code-template pilot: bounded operation, protocol, backend adapter, permissions, lifecycle, timeout and result contract. Other template protocols need separate adapters.
 3. Completed for the pilot through the controlled tool registry; the tool environment and Agent session use distinct Cube instances. No arbitrary shell or implicit session adoption was added.
-4. Completed for one synthetic JCode turn and fixture fault paths below. Multi-template concurrent load, cross-node cleanup and application-session prewarm remain unverified.
+4. Completed for four synthetic JCode turns, resident recreation, PostgreSQL result/audit checks and desktop/mobile Web persistence. Four concurrent resident sessions also passed on the existing active template; this did not exercise concurrent code-template tools. Multi-template concurrent load, cross-node cleanup and application-session prewarm remain unverified. The business tool timeline still needs safe parameter/result summaries and duration; guest workload metrics and historical monitoring/alerts remain separate work.
 
 ## 2026-09-26 pilot evidence and limits
 
@@ -68,6 +68,47 @@ Real run command: `VERIFY_QUANTITY_RESIDENT_TEMPLATE=tpl-e4b67dd6331e4de5be41f39
 Two earlier real canary failures informed the fix: Cube rejected integer `erp_message` metadata with HTTP 422, so it is now a string; a candidate adoption check rejected Cube v0.7.2's own `privileged=true` security context, so that asymmetric experiment check was corrected. Reports: `/tmp/erp-cube-quantity/1790406705425/report.json` and `/tmp/erp-cube-quantity/1790406564366/report.json`. The latter correction lives in the uncommitted management experiment, not in the reusable quantity adapter. The verifier's optional candidate path uses that experiment to test a new resident template; its default path creates an ordinary conversation and requires the configured resident template to match.
 
 This is a local code-template canary, not an activated default runtime, a general code execution tool, broad template compatibility, production deployment or 50-user mixed-workload acceptance. Template creation and monitoring continue in Cube WebUI; no new Forge management workflow is accepted. The current official code image tag, guest resource telemetry, cross-node recovery, long-running concurrency, ERP writes, browser templates and parser templates remain separate work.
+
+## 2026-09-26 follow-up acceptance
+
+The bounded code tool remains a canary on resident template `tpl-e4b67dd6331e4de5be41f393` and code template `tpl-9b71f0dec7a54bb1ac07465c`. The active release remained `e95e0353-cb32-45b3-9f6f-98568161b596` version 1; no default runtime was activated. Only synthetic test conversations were used. This round changed verifier scripts and documentation, not the business API, Bridge or service configuration.
+
+Commands (dedicated local credentials are loaded from ignored env files):
+
+```sh
+VERIFY_QUANTITY_OUTPUT=/tmp/erp-cube-quantity-acceptance-20260926/quantity-attempt \
+VERIFY_QUANTITY_ROUNDS=4 VERIFY_QUANTITY_RECREATE_AFTER=2 \
+VERIFY_QUANTITY_RESIDENT_TEMPLATE=tpl-e4b67dd6331e4de5be41f393 \
+VERIFY_QUANTITY_CANDIDATE_ID=c1c888b7-54dc-4da0-8e26-72b2739c6b29 \
+node --env-file=.env --env-file=.runtime/cube.env scripts/verify-cube-quantity-live.mjs
+
+CUBE_TEMPLATE_ID=tpl-474aeb8eaec04f07a052144b VERIFY_CUBE_COUNT=4 \
+VERIFY_CUBE_OUTPUT=/tmp/erp-cube-quantity-acceptance-20260926/concurrent-final \
+VERIFY_CUBE_MATCHED_PROMPT='Synthetic acceptance. Call case_read exactly once for the current conversation. After the tool succeeds, reply with exactly CUBE-READ-OK. Do not call any other tools.' \
+VERIFY_EXPECTED_ANSWER=CUBE-READ-OK \
+node --env-file=.env --env-file=.runtime/cube.env scripts/verify-cube-resident-live.mjs
+
+PLAYWRIGHT_MODULE=/tmp/erp-agent-flow-check/node_modules/playwright/index.mjs \
+VERIFY_QUANTITY_REPORT=/tmp/erp-cube-quantity-acceptance-20260926/quantity-attempt/report.json \
+VERIFY_QUANTITY_UI_OUTPUT=/tmp/erp-cube-quantity-acceptance-20260926/web \
+node --env-file=.env scripts/verify-web-cube-quantity.mjs
+```
+
+Quantity report: `/tmp/erp-cube-quantity-acceptance-20260926/quantity-attempt/report.json`, `passed=true`. Messages 2229-2232 in case `7444a63e-14c8-4e55-b6ac-f9deb1e2133f` returned the expected totals 50, 18, 1,000,465 and 0. The third input exercised the 32-item limit and an item at 1,000,000; the fourth exercised a single zero. Each turn made exactly one completed `cube_quantity_summary` call, with matching count/sum/min/max in PostgreSQL and one completion audit. All saved run timings identified backend `cube`. Tool durations were 447, 496, 615 and 530 ms; complete run durations were 3,134, 2,549, 3,630 and 2,704 ms. These four samples do not establish production latency or capacity.
+
+After round two, resident instance `faf9a95ead014c2aaa9ff28aff696658` was deleted; rounds three and four used new instance `5229bea58d7d4fb9915cbe983f9c48d5`. All rounds retained PostgreSQL JCode session `session_3853f2ac4e7b41d08c1eaea3f1344adc` and correctly recalled this attempt's unique marker. The active transcript grew from 29 to 41 entries. Each tool used a separate code-template instance; all four tool instances and both resident instances were absent from Cube inventory after cleanup. A forged token and a valid browser login token both received 401 on the internal tool endpoint with a real session ID, creating no tool operations.
+
+Resident concurrency report: `/tmp/erp-cube-quantity-acceptance-20260926/concurrent-final/report.json`. Four distinct cases, JCode sessions and Cube instances on active template `tpl-474aeb8eaec04f07a052144b` completed two rounds with 8/8 correct replies. The cold round executed one `case_read` per case; the warm round recalled the prior answer without a tool. Observed cold/warm queue P95 was 70/19 ms, first-token P95 3,724/1,791 ms and complete-response P95 3,807/1,872 ms. Peak running counts were four/three; cross-case Bridge credentials received 401 and all four instances were released. This tests the existing resident path, not concurrent quantity-tool environments. The separate 50-session test recorded earlier had 100/100 completed but 93/100 correct arithmetic replies; this small test does not replace that limitation.
+
+Web report: `/tmp/erp-cube-quantity-acceptance-20260926/web/report.json`, `passed=true`. Playwright verified the persisted final reply, localized business label for quantity summary and completed state at 1440, 390 and 320 px, then after reload. Composer and attachment/model/approval/send controls fit the viewport; no horizontal overflow, page errors or HTTP errors were observed. Screenshots are `web/quantity-1440.png`, `web/quantity-390.png`, `web/quantity-320.png` and `web/quantity-1440-reload.png` under the same report directory. The current tool timeline shows label and state only; it does not yet present safe input/result summaries or elapsed time. Those details are durable in PostgreSQL, but backend records are not a complete business-UI acceptance result.
+
+Monitoring sample: the existing `scripts/sample-agent-runtime-resources.mjs` ran with `RESOURCE_OUTPUT=/tmp/erp-cube-quantity-acceptance-20260926/resources.json` at 500 ms intervals during acceptance, then was stopped. There were 557 samples and zero scrape errors. Observed peaks were API RSS 268.6 MiB, runtime RSS 11.4 MiB, four host sandbox metric series, 39 MiB sandbox cgroup charge and 68 PostgreSQL connections; host sandbox memory-limit failures stayed zero. Samples are node-wide and include unrelated work. Guest workload metric series were absent, so no guest working-set or guest failure claim is supported. No retained Prometheus history or alert firing was tested. Cube WebUI, Cubelet, CubeOps, the control target, Forge API and eight Workers were active afterward; API readiness was 200 and Cube WebUI `/health` reported `status=ok` with zero sandboxes after cleanup. This round did not capture the native Cube dashboard with running test instances.
+
+Earlier attempts exposed verifier assumptions rather than new runtime defects: a malformed session ID produced 400 before the browser-token check, result metadata made an exact-object assertion too strict, an old canary marker made recall ambiguous, and the legacy env template differed from the active release. The corrected run used a real session ID, asserted the bounded result fields plus identity metadata, supplied an attempt-specific marker and explicitly matched the active template for the concurrency script. Commands changed only the verifier process environment, not the running release.
+
+`node --check` passed for both changed scripts and `git diff --check` passed. The preceding pilot's full `npm run check` remains the build/system evidence; it was not rerun for these script/document-only edits. Raw reports and screenshots are under `/tmp` and may be removed by local cleanup; this durable summary records the measured results and limits.
+
+Remaining gates: concurrent code-template tools and mixed load, browser/parser adapters, immutable code-image digest capture, safe tool input/result/duration display, guest metrics and historical alerts, full application-session prewarm, cross-node recovery, ERP writes and production deployment. Local template interoperability is demonstrated for this one bounded capability; arbitrary Cube templates are not automatically JCode tools.
 
 ## Previous experiment
 
