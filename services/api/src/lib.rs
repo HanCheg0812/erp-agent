@@ -34,6 +34,10 @@ fn internal_router(app: App) -> Router {
             post(permissions::read_attachment),
         )
         .route(
+            "/internal/agent-sessions/{id}/cube/quantity-summary",
+            post(sandboxes::summarize_quantities),
+        )
+        .route(
             "/internal/agent-sessions/{id}",
             get(agent_sessions::load),
         )
@@ -156,6 +160,10 @@ pub fn router(app: App) -> Router {
         .route(
             "/internal/agent-sessions/{id}/attachments/read",
             post(permissions::read_attachment),
+        )
+        .route(
+            "/internal/agent-sessions/{id}/cube/quantity-summary",
+            post(sandboxes::summarize_quantities),
         )
         .route(
             "/health",

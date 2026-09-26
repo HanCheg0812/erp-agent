@@ -2,13 +2,14 @@ use crate::platform::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-pub const TOOLS: [&str; 13] = [
+pub const TOOLS: [&str; 14] = [
     "memory_save",
     "case_set_context",
     "proposal_create",
     "request_proposal_approval",
     "case_read",
     "attachment_read",
+    "cube_quantity_summary",
     "todo",
     "skill_find",
     "skill_manage",
@@ -132,7 +133,7 @@ mod tests {
         ] {
             assert!(settings.validate().is_err());
         }
-        assert_eq!(TOOLS.len(), 13);
+        assert_eq!(TOOLS.len(), 14);
         assert!(TOOLS.contains(&"request_proposal_approval"));
         assert_eq!(model_context_window("deepseek-flash"), Some(1_048_576));
         assert_eq!(model_context_window("unknown"), None);

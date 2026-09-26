@@ -21,7 +21,9 @@ use serde_json::{Value, json};
 use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 
-use super::{AttachmentRead, CaseRead, Request, actions, business_mcp, recovery, skills};
+use super::{
+    AttachmentRead, CaseRead, Request, actions, business_mcp, cube_quantity, recovery, skills,
+};
 
 const MAX_IMAGES: usize = 4;
 
@@ -126,6 +128,13 @@ pub(crate) async fn build(request: &Request) -> Result<ResidentRuntime> {
             .register(name.into(), Arc::new(actions::AuthorizedAction(name)))
             .await;
     }
+    available.insert("cube_quantity_summary".into());
+    registry
+        .register(
+            "cube_quantity_summary".into(),
+            Arc::new(cube_quantity::CubeQuantitySummary),
+        )
+        .await;
     for (name, tool) in business_mcp::connect().await? {
         available.insert(name.clone());
         registry.register(name, tool).await;

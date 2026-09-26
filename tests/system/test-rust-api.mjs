@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import pg from 'pg';
 import { testBusinessActions } from './test-business-actions.mjs';
 import { originalStorageFixture, testOriginalBoundaries, testMemoryTransaction } from './test-layer-boundaries.mjs';
+import { cubeQuantityFixture, testCubeQuantity } from './test-cube-quantity.mjs';
 
 const binary = new URL('../../services/api/target/debug/erp-agent-api', import.meta.url).pathname;
 const fixtureDir = await mkdtemp(join(tmpdir(), 'erp-api-fixture-'));
@@ -23,10 +24,12 @@ const url = new URL(process.env.DATABASE_URL); url.pathname = name;
 const db = new pg.Client({ connectionString: url.href }); await db.connect();
 let child; let second; let logs = ''; let creates = 0; let erpRequests = 0; const erpAuthHeaders = []; let remote = null; let loseCreate = false; let uncertainDelete = false; let cubeTurnCompleted = false;
 const originals = originalStorageFixture();
+const quantities = cubeQuantityFixture();
 const cube = createServer(async (req, res) => {
   const chunks = []; for await (const chunk of req) chunks.push(chunk);
   const bytes = Buffer.concat(chunks);
   if (originals.handle(req, res, bytes)) return;
+  if (await quantities.handle(req, res, bytes)) return;
   const input = bytes.toString('utf8');
   res.setHeader('content-type', 'application/json');
   if (req.url === '/responses') {
@@ -112,7 +115,7 @@ const cube = createServer(async (req, res) => {
 cube.listen(0, '127.0.0.1'); await once(cube, 'listening');
 const listener = createServer(); listener.listen(0, '127.0.0.1'); await once(listener, 'listening'); const port = listener.address().port; await new Promise(resolve => listener.close(resolve));
 const origin = `http://127.0.0.1:${port}`;
-const env = { ...process.env, ERP_AGENT_LOAD_CUBE_ENV:'0', API_INTERNAL_HOST:'', DATABASE_URL: url.href, API_PORT: String(port), DEEPSEEK_API_KEY: '', ERP_API_TOKEN:'synthetic-erp', ERP_CREDENTIAL_FORGE_READER:'forge-reader-token', ERP_CREDENTIAL_LIMITED_READER:'limited-reader-token', ERP_API_URL:`http://127.0.0.1:${cube.address().port}`, ERP_SHARED_DEMO_MODE:'true', OPENVIKING_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_API_KEY:'', CUBE_API_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_OPS_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_PROXY_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_TEMPLATE_ID: 'test' };
+const env = { ...process.env, ERP_AGENT_LOAD_CUBE_ENV:'0', API_INTERNAL_HOST:'', DATABASE_URL: url.href, API_PORT: String(port), DEEPSEEK_API_KEY: '', ERP_API_TOKEN:'synthetic-erp', ERP_CREDENTIAL_FORGE_READER:'forge-reader-token', ERP_CREDENTIAL_LIMITED_READER:'limited-reader-token', ERP_API_URL:`http://127.0.0.1:${cube.address().port}`, ERP_SHARED_DEMO_MODE:'true', OPENVIKING_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_API_KEY:'', CUBE_API_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_OPS_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_PROXY_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_TEMPLATE_ID: 'test', CUBE_QUANTITY_TEMPLATE_ID: 'quantity-test' };
 env.AGENT_MAX_CONCURRENT_RUNS = '4';
 env.RUSTFS_ENDPOINT=`http://127.0.0.1:${cube.address().port}`;
 env.RUSTFS_BUCKET='fixture-originals'; env.RUSTFS_ACCESS_KEY='synthetic'; env.RUSTFS_SECRET_KEY='synthetic-test-only';
@@ -304,6 +307,18 @@ try {
   const secondHistory = await api(`/cases/${secondCase.id}/conversation`, { token: c });
   const secondClaim = await api(`/agent-sessions/${secondHistory.session_id}/claim`, { token: c, method: 'POST', body: {} });
   await db.query("INSERT INTO agent_runs(message_id,tenant_id,case_id,state) VALUES($1,$2,$3,'running')", [secondMessage.message.id,actor.tenantId,secondCase.id]);
+  const quantityPath = `/internal/agent-sessions/${sid}/cube/quantity-summary`;
+  const quantityInput = { tool_call_id: 'cross_case_probe', quantities: [12, 18, 20] };
+  const quantityCreates = creates;
+  await api(quantityPath, { token: secondClaim.storage_token, method: 'POST', body: quantityInput, status: 401 });
+  await api(`/internal/agent-sessions/${secondHistory.session_id}/cube/quantity-summary`, { token: newClaim.storage_token, method: 'POST', body: quantityInput, status: 401 });
+  await api(quantityPath, { token: a, method: 'POST', body: quantityInput, status: 401 });
+  await api(quantityPath, { token: newClaim.storage_token, method: 'POST', body: { ...quantityInput, quantities: [-1] }, status: 400 });
+  assert.equal(creates, quantityCreates);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM cube_quantity_tool_calls')).rows[0].n, 0);
+  note('Cube tool rejects crossed session tokens and malformed input before creating an instance');
+  await testCubeQuantity({ api, db, token: a, actor, fixture: quantities, stop, start });
+  note('Cube tool replay, result validation, lost creation and cleanup reconciliation persist across API restart');
   await db.query("INSERT INTO integration_grants(tenant_id,owner_id,domain,scope,tool_id,action,resource_type) VALUES($1,$2,'erp','OTHER','list_erp_orders','read','customer')",[actor.tenantId,cId]);
   await db.query("INSERT INTO erp_identity_bindings(tenant_id,platform_user_id,connection_id,erp_user_id,credential_ref) VALUES($1,$2,$3,'limited-reader@example.test','env:ERP_CREDENTIAL_LIMITED_READER')",[actor.tenantId,cId,erpConnection]);
   const beforeNativeReject = erpRequests;

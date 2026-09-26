@@ -357,6 +357,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "20260924160000_create_knowledge_embedding_jobs",
         include_str!("../../migrations/20260924160000_create_knowledge_embedding_jobs.sql"),
     ),
+    (
+        "20260926110000_cube_quantity_tool",
+        include_str!("../../migrations/20260926110000_cube_quantity_tool.sql"),
+    ),
 ];
 const LEGACY_MIGRATION_IDS: &[(&str, &str)] = &[
     ("001_auth", "20260921171235_create_auth_schema"),

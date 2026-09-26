@@ -18,6 +18,7 @@ use std::{collections::HashSet, io::Write, sync::Arc, time::Duration};
 use tokio::io::AsyncReadExt;
 mod actions;
 mod business_mcp;
+mod cube_quantity;
 mod recovery;
 mod resident;
 mod runtime;
@@ -257,6 +258,13 @@ async fn run() -> Result<()> {
             .register(name.into(), Arc::new(actions::AuthorizedAction(name)))
             .await;
     }
+    available.insert("cube_quantity_summary".into());
+    registry
+        .register(
+            "cube_quantity_summary".into(),
+            Arc::new(cube_quantity::CubeQuantitySummary),
+        )
+        .await;
     for (name, tool) in business_mcp::connect().await? {
         available.insert(name.clone());
         registry.register(name, tool).await;

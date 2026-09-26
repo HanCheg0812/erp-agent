@@ -6,6 +6,8 @@
 
 Cube 官方控制台的本地入口、服务托管和监控验证状态见 [Web UI 验证](cube-webui.md)。
 
+当前目标是让 JCode 复用 Cube 的不同模板环境：既可运行于兼容模板内，也可通过受控工具调用其他模板实例，见 [Cube 模板接入计划与验收](runtime-management.md)。已有常驻 JCode 模板；额外代码模板的受控数量汇总工具通过本地真实 Cube/JCode 单回合验收，浏览器和解析模板仍待适配。新增 Forge 管理页是尚未提交的偏离目标实验；不以新增或迁移管理页代替模板接入。
+
 输入框的“请求批准 / 帮我批准 / 完全访问”现在按会话持久化到 PostgreSQL；切换会立即 PATCH 当前会话，下一轮由后端注入权威权限上下文，运行中的回合拒绝切换。通用工具授权与业务审批见[通用工具授权与业务审批](approval-workflow.md)。流式中断修复见[原因与验收](stream-recovery-fix.md)。
 
 Web Agent Chat 与灰白视觉的实现、验证及边界见 [Web 会话记录](web-ui.md)。

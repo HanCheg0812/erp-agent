@@ -458,7 +458,7 @@ async fn turn(
         "mode": settings.approval,
         "operation_tools": ["memory_save", "case_set_context", "proposal_create"],
         "read_tools": [
-            "case_read", "attachment_read", "todo", "skill_find", "skill_manage",
+            "case_read", "attachment_read", "cube_quantity_summary", "todo", "skill_find", "skill_manage",
             "mcp__erp__list_erp_orders", "mcp__erp__read_erp_order",
             "mcp__openviking__search_case_knowledge", "mcp__openviking__read_knowledge_source"
         ],
@@ -797,7 +797,7 @@ async fn turn_cube(
         "mode": settings.approval,
         "operation_tools": ["memory_save", "case_set_context", "proposal_create"],
         "read_tools": [
-            "case_read", "attachment_read", "todo", "skill_find", "skill_manage",
+            "case_read", "attachment_read", "cube_quantity_summary", "todo", "skill_find", "skill_manage",
             "mcp__erp__list_erp_orders", "mcp__erp__read_erp_order",
             "mcp__openviking__search_case_knowledge", "mcp__openviking__read_knowledge_source"
         ],

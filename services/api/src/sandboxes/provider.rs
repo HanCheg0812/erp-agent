@@ -42,8 +42,7 @@ pub(super) fn unavailable() -> Error {
         "Runtime provider is unavailable",
     )
 }
-pub(super) async fn preflight(app: &App) -> Result<()> {
-    let template = env("CUBE_TEMPLATE_ID", "");
+pub(super) async fn preflight(app: &App, template: &str) -> Result<()> {
     if template.is_empty()
         || !template
             .bytes()

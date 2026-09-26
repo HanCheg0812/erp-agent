@@ -16,6 +16,7 @@ const toolLabels: Record<string, { label: string; Icon: typeof FileText }> = {
   skill_find: { label: '查找业务指引', Icon: Search },
   skill_manage: { label: '读取业务指引', Icon: BookOpen },
   attachment_read: { label: '查看附件', Icon: FileText },
+  cube_quantity_summary: { label: '汇总数量', Icon: Database },
   bash: { label: '读取运行环境', Icon: Monitor },
   mcp__erp__list_erp_orders: { label: '查看订单', Icon: Database },
   mcp__erp__read_erp_order: { label: '查看订单详情', Icon: Database },

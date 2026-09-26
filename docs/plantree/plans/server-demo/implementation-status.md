@@ -1,5 +1,7 @@
 # Implementation Status
 
+2026-09-26 Cube 多模板工具试点：`cube_quantity_summary` 通过 JCode 受控工具调用另一 Cube 代码模板实例，验证了单次真实模型回合、PostgreSQL 结果/审计、不同实例绑定及删除。最新报告 `/tmp/erp-cube-quantity/1790409061504/report.json`；保存的工具耗时 507 ms，只代表一次本地样本。`npm run check`、Bridge 单测及故障 fixture 通过；模板候选只用于 canary，默认 release 未切换。浏览器/解析模板、并发与跨节点回收仍未验收。设计、命令和失败链路见[模板接入计划](runtime-management.md#2026-09-26-pilot-evidence-and-limits)。
+
 2026-09-26 受控环境读取：按用户要求保持本地临时探针开启，默认配置仍关闭。真实 Cube 冷回合完成五条固定只读命令，PostgreSQL 工具原始结果确认 `/home/forge/work`、`forge` UID 10001 和 Ubuntu 24.04.5；暖回合只转述已有结果，不能算第二次执行。Web 以“读取运行环境”展示五条完成记录，刷新和 1440/390/320 px 检查通过。命令、会话标识、开关生效时机和证据见[常驻运行时记录](cube-resident-runtime.md)。
 
 2026-09-24 RAG embedding 基础：新增独立 `services/ingestion-worker` 的 TEI HTTP 客户端和 `embedding-worker` 二进制。PostgreSQL 新增 `knowledge_chunks`、带租约/fencing token/退避的 `knowledge_embedding_jobs`，以及 pgvector `knowledge_chunk_embeddings`；worker 校验文本 SHA-256、模型登记维度并幂等 upsert，绝不消费个人 `memory_outbox`。迁移已在当前 pgvector 本地数据库执行，ingestion-worker 的 9 个单元测试与 5 个 fixture 测试通过。尚未接入真实 TEI、MinerU 产物入队或 OpenViking 发布，因此不把此项称为端到端 RAG 验收。

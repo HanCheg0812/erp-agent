@@ -439,7 +439,7 @@ async fn operate_locked(
                     return Err(Error::conflict("sandbox_exists"));
                 }
             }
-            preflight(app).await?;
+            preflight(app, &env("CUBE_TEMPLATE_ID", "")).await?;
             let tx = db.transaction().await?;
             cases::case(&*tx, actor, id, true).await?;
             let session = agent_sessions::bind(&tx, actor, id).await?;
