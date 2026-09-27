@@ -3,7 +3,7 @@ use anyhow::{Context, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     future::poll_fn,
     process::Stdio,
     sync::Arc,
@@ -29,6 +29,90 @@ impl std::error::Error for TurnFailure {}
 struct CubeLines {
     pending: Vec<u8>,
     total: usize,
+}
+
+struct RunTiming {
+    started: Instant,
+    backend: &'static str,
+    offsets: serde_json::Map<String, Value>,
+    running_tools: HashMap<String, (String, Instant)>,
+    tools: Vec<Value>,
+    runtime: Option<Value>,
+    lifecycle: Option<Value>,
+}
+
+impl RunTiming {
+    fn new(backend: &'static str) -> Self {
+        Self {
+            started: Instant::now(),
+            backend,
+            offsets: serde_json::Map::new(),
+            running_tools: HashMap::new(),
+            tools: Vec::new(),
+            runtime: None,
+            lifecycle: None,
+        }
+    }
+
+    fn mark(&mut self, name: &str) {
+        self.offsets
+            .entry(name.to_owned())
+            .or_insert_with(|| json!(self.started.elapsed().as_millis() as u64));
+    }
+
+    fn event(&mut self, event: &Value) {
+        match event["type"].as_str() {
+            Some("skill_catalog") => self.mark("catalog"),
+            Some("runtime_timing") => {
+                self.runtime = Some(json!({
+                    "reused": event["reused"],
+                    "build_ms": event["build_ms"],
+                    "model_catalog_ms": event["model_catalog_ms"]
+                }));
+            }
+            Some("reasoning_delta") if event["text"].as_str().is_some_and(|s| !s.is_empty()) => {
+                self.mark("first_reasoning");
+            }
+            Some("text_delta" | "text_replace")
+                if event["text"].as_str().is_some_and(|s| !s.is_empty()) =>
+            {
+                self.mark("first_text");
+            }
+            Some("tool_start") => {
+                self.mark("first_tool_start");
+                if let (Some(id), Some(name)) = (event["id"].as_str(), event["name"].as_str()) {
+                    self.running_tools
+                        .insert(id.to_owned(), (name.to_owned(), Instant::now()));
+                }
+            }
+            Some("tool_done") => {
+                self.mark("first_tool_done");
+                if let Some((name, started)) = event["id"]
+                    .as_str()
+                    .and_then(|id| self.running_tools.remove(id))
+                {
+                    self.tools.push(json!({
+                        "name": name,
+                        "duration_ms": started.elapsed().as_millis() as u64,
+                        "failed": event["failed"] == true
+                    }));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn snapshot(&self) -> Value {
+        json!({
+            "version": 1,
+            "backend": self.backend,
+            "offsets_ms": self.offsets,
+            "tools": self.tools,
+            "runtime": self.runtime,
+            "lifecycle": self.lifecycle,
+            "elapsed_ms": self.started.elapsed().as_millis() as u64
+        })
+    }
 }
 impl CubeLines {
     fn push(&mut self, chunk: &[u8]) -> anyhow::Result<Vec<Value>> {
@@ -75,6 +159,15 @@ struct Reply {
     boundary: bool,
     suspended: bool,
 }
+
+fn temporary_bash_probe_enabled() -> bool {
+    matches!(std::env::var("AGENT_TEMP_BASH_PROBE").as_deref(), Ok("1"))
+}
+
+fn tool_is_published(name: &str, bash_enabled: bool) -> bool {
+    crate::integrations::TOOLS.contains(&name) || (bash_enabled && name == "bash")
+}
+
 impl Reply {
     fn close(&mut self, state: &str) {
         for step in &mut self.steps {
@@ -118,7 +211,7 @@ impl Reply {
                 let id = event["id"].as_str().context("Tool id missing")?;
                 let name = event["name"].as_str().context("Tool name missing")?;
                 ensure!(
-                    id.len() <= 256 && crate::integrations::TOOLS.contains(&name),
+                    id.len() <= 256 && tool_is_published(name, temporary_bash_probe_enabled()),
                     "Unpublished tool"
                 );
                 if kind == "tool_start" && !self.tools.iter().any(|t| t["id"] == id) {
@@ -273,9 +366,10 @@ async fn turn(
     row: &Value,
     reply: &mut Reply,
     stop: &tokio_util::sync::CancellationToken,
+    timing: &mut RunTiming,
 ) -> anyhow::Result<()> {
     if crate::sandboxes::bridge::enabled() {
-        return turn_cube(app, db, row, reply, stop).await;
+        return turn_cube(app, db, row, reply, stop, timing).await;
     }
     let actor = Principal {
         tenant_id: uuid(row["tenant_id"].as_str().unwrap())?,
@@ -454,11 +548,12 @@ async fn turn(
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
+    timing.mark("runtime_started");
     let permission_context = json!({
         "mode": settings.approval,
         "operation_tools": ["memory_save", "case_set_context", "proposal_create"],
         "read_tools": [
-            "case_read", "attachment_read", "cube_quantity_summary", "todo", "skill_find", "skill_manage",
+            "case_read", "attachment_read", "cube_quantity_summary", "cube_browser_browse", "todo", "skill_find", "skill_manage",
             "mcp__erp__list_erp_orders", "mcp__erp__read_erp_order",
             "mcp__openviking__search_case_knowledge", "mcp__openviking__read_knowledge_source"
         ],
@@ -476,7 +571,8 @@ async fn turn(
         turn_text.push_str("\n\nAttached material status:\n");
         turn_text.push_str(&attachment_notes.join("\n\n"));
     }
-    let input = json!({"text":turn_text,"images":images,"new_session":claim["revision"]==0,"case":record,"operation":row["operation"],"memories":memories,"approval":settings.approval,"permission_context":permission_context,"effort":settings.effort,"resume":row["resumable"]==true});
+    let input = json!({"text":turn_text,"images":images,"new_session":claim["revision"]==0,"case":record,"operation":row["operation"],"memories":memories,"approval":settings.approval,"permission_context":permission_context,"model":settings.model,"effort":settings.effort,"resume":row["resumable"]==true});
+    timing.mark("input_ready");
     let mut stdin = child.stdin.take().unwrap();
     stdin.write_all(&serde_json::to_vec(&input)?).await?;
     stdin.shutdown().await?;
@@ -526,6 +622,7 @@ async fn turn(
             );
             let event: Value = serde_json::from_slice(&line)?;
             let kind = event["type"].as_str().context("Event missing")?;
+            timing.event(&event);
             if !first_token_seen
                 && ["text_delta", "text_replace"].contains(&kind)
                 && event["text"].as_str().is_some_and(|text| !text.is_empty())
@@ -639,6 +736,7 @@ async fn turn_cube(
     row: &Value,
     reply: &mut Reply,
     stop: &tokio_util::sync::CancellationToken,
+    timing: &mut RunTiming,
 ) -> anyhow::Result<()> {
     ensure!(!stop.is_cancelled(), "Run interrupted");
     let actor = Principal {
@@ -649,10 +747,19 @@ async fn turn_cube(
     };
     let case_id = uuid(row["case_id"].as_str().unwrap())?;
     let message_id = row["message_id"].as_i64().unwrap();
+    ensure!(
+        !crate::sandboxes::switch_pending(db, actor.tenant_id, case_id).await?,
+        "Runtime template switch in progress"
+    );
     // Cube is an internal execution detail. The business UI never manages a
     // sandbox, so the first queued turn provisions the resident instance and
     // later turns reuse it through the case-bound database lease.
-    crate::sandboxes::ensure_resident_ready(app, &actor, case_id).await?;
+    let mut ready_timing = crate::sandboxes::ReadyTiming::default();
+    let ready =
+        crate::sandboxes::ensure_resident_ready(app, &actor, case_id, &mut ready_timing).await;
+    timing.lifecycle = Some(json!(ready_timing));
+    ready?;
+    timing.mark("sandbox_ready");
     let mut record = cases::case(db, &actor, case_id, false).await?;
     record["proposals"] = json!(array(
         db,
@@ -669,7 +776,7 @@ async fn turn_cube(
 
     let sandbox = db
         .query_opt(
-            "SELECT to_jsonb(s) FROM case_sandboxes s WHERE tenant_id=$1 AND case_id=$2 AND state='provisioned' ORDER BY created_at DESC LIMIT 1",
+            "SELECT to_jsonb(s) FROM case_sandboxes s WHERE tenant_id=$1 AND case_id=$2 AND active=true AND state='provisioned' ORDER BY created_at DESC LIMIT 1",
             &[&actor.tenant_id, &case_id],
         )
         .await?
@@ -797,7 +904,7 @@ async fn turn_cube(
         "mode": settings.approval,
         "operation_tools": ["memory_save", "case_set_context", "proposal_create"],
         "read_tools": [
-            "case_read", "attachment_read", "cube_quantity_summary", "todo", "skill_find", "skill_manage",
+            "case_read", "attachment_read", "cube_quantity_summary", "cube_browser_browse", "todo", "skill_find", "skill_manage",
             "mcp__erp__list_erp_orders", "mcp__erp__read_erp_order",
             "mcp__openviking__search_case_knowledge", "mcp__openviking__read_knowledge_source"
         ],
@@ -824,9 +931,11 @@ async fn turn_cube(
         "memories": memories,
         "approval": settings.approval,
         "permission_context": permission_context,
+        "model": settings.model,
         "effort": settings.effort,
         "resume": row["resumable"] == true
     });
+    timing.mark("input_ready");
     ensure!(!stop.is_cancelled(), "Run interrupted");
     let url = crate::sandboxes::bridge::guest_url(sandbox_id, "/v1/turn")?;
     let token = crate::sandboxes::bridge::token_for(operation)?;
@@ -840,10 +949,12 @@ async fn turn_cube(
     if configured_timeout > 0 {
         request = request.timeout(Duration::from_secs(configured_timeout.saturating_add(35)));
     }
+    timing.mark("bridge_request");
     let mut response = request
         .send()
         .await
         .context("Cube runtime request failed")?;
+    timing.mark("bridge_response");
     let status = response.status();
     if !status.is_success() {
         let body = response
@@ -882,6 +993,7 @@ async fn turn_cube(
         for event in lines.push(&chunk)? {
             ensure!(!completed, "Invalid Cube runtime stream");
             let kind = event["type"].as_str().context("Cube event type missing")?;
+            timing.event(&event);
             if !first_token_seen
                 && ["text_delta", "text_replace"].contains(&kind)
                 && event["text"].as_str().is_some_and(|text| !text.is_empty())
@@ -909,6 +1021,15 @@ async fn turn_cube(
                         &[&message_id, &hash],
                     )
                     .await?;
+                }
+                "runtime_timing" => {
+                    ensure!(snapshot.is_some(), "Runtime timing before catalog");
+                    ensure!(
+                        event["reused"].is_boolean()
+                            && event["build_ms"].is_u64()
+                            && event["model_catalog_ms"].is_u64(),
+                        "Invalid runtime timing"
+                    );
                 }
                 "skill_loaded" => {
                     let found = snapshot
@@ -1064,8 +1185,10 @@ async fn process_candidate(
                 return Ok(());
             }
             if db.execute("UPDATE agent_runs SET state='running',started_at=now(),updated_at=now() WHERE message_id=$1 AND state='queued' AND NOT cancel_requested",&[&id]).await?==0{return Ok(());}
+            let mut timing = RunTiming::new(if crate::sandboxes::bridge::enabled() { "cube" } else { "host" });
             let mut reply=if row["resumable"]==true { Reply { text:row["text"].as_str().unwrap_or("").into(), tools:serde_json::from_value(row["tools"].clone())?,steps:serde_json::from_value(row["steps"].clone())?,compactions:serde_json::from_value(row["compactions"].clone())?,context_usage:row.get("context_usage").filter(|value| !value.is_null()).cloned(),boundary:true,suspended:false } } else { Reply::default() };
-            let result=turn(app,&db,&row,&mut reply,stop).await;
+            let result=turn(app,&db,&row,&mut reply,stop,&mut timing).await;
+            timing.mark("turn_returned");
             if !crate::sandboxes::bridge::enabled() {
                 db.execute("UPDATE mcp_sessions SET revoked_at=now(),updated_at=now() WHERE run_message_id=$1 AND revoked_at IS NULL", &[&id]).await?;
             }
@@ -1084,7 +1207,8 @@ async fn process_candidate(
             } }) };
             let pending: bool = tx.query_one("SELECT EXISTS(SELECT 1 FROM agent_tool_permissions WHERE message_id=$1 AND state='pending')", &[&id]).await?.get(0);
             let state = if cancelled {"cancelled"} else if recoverable {"waiting"} else if result.is_err() {"failed"} else if reply.suspended {if pending {"waiting"}else{"queued"}} else {"completed"};
-            tx.execute("UPDATE agent_runs SET state=$2,error=$3,finished_at=CASE WHEN $2 IN ('completed','failed','cancelled') THEN now() END,updated_at=now() WHERE message_id=$1",&[&id,&state,&error]).await?;
+            let timing_sample = timing.snapshot();
+            tx.execute("UPDATE agent_runs SET state=$2,error=$3,finished_at=CASE WHEN $2 IN ('completed','failed','cancelled') THEN now() END,updated_at=now(),timings=timings||jsonb_build_array($4::jsonb) WHERE message_id=$1",&[&id,&state,&error,&timing_sample]).await?;
             if ["cancelled","failed"].contains(&state) {
                 tx.execute("UPDATE agent_tool_permissions SET state='cancelled',decided_by='cancel',reason='会话已停止',decided_at=now() WHERE message_id=$1 AND state IN ('pending','allowed')", &[&id]).await?;
             }
@@ -1192,6 +1316,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn temporary_bash_is_published_only_when_enabled() {
+        assert!(!tool_is_published("bash", false));
+        assert!(tool_is_published("bash", true));
+        assert!(tool_is_published("case_read", false));
+        assert!(tool_is_published("mcp__erp__read_erp_order", false));
+        assert!(!tool_is_published("sh", true));
+    }
+
+    #[test]
     fn cube_lines_decode_events_across_network_chunks() {
         let mut lines = CubeLines::default();
         assert!(lines.push(b"{\"type\":\"text_").unwrap().is_empty());
@@ -1275,7 +1408,7 @@ mod tests {
     fn reply_rejects_unknown_unpublished_or_inconsistent_events_and_limits() {
         for event in [
             json!({"type":"unknown"}),
-            json!({"type":"tool_start","id":"tool-1","name":"bash"}),
+            json!({"type":"tool_start","id":"tool-1","name":"not_published"}),
             json!({"type":"tool_done","id":"tool-1","name":"case_read","failed":false}),
             json!({"type":"compaction","trigger":"manual","pre_tokens":"bad","post_tokens":null,"tokens_saved":null,"duration_ms":null,"messages_dropped":null,"messages_compacted":null,"summary_chars":null,"active_messages":null}),
             json!({"type":"context_usage","model":"unknown","used_tokens":1,"window_tokens":100,"soft_ratio":0.8,"critical_ratio":0.9,"compacting":false,"estimated":true}),

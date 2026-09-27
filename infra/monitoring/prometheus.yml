@@ -1,0 +1,70 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    forge_instance: local-host
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["127.0.0.1:29193"]
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:29190"]
+
+  - job_name: forge-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["127.0.0.1:3101"]
+
+  - job_name: postgres-exporter
+    static_configs:
+      - targets: ["127.0.0.1:29187"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["127.0.0.1:29100"]
+
+  # Cubelet's native sandbox resource metrics. The endpoint may legitimately
+  # return an empty body when the node has no running sandboxes.
+  - job_name: cubelet-resource
+    metrics_path: /v1/metrics/resource
+    static_configs:
+      - targets: ["127.0.0.1:9998"]
+
+  - job_name: forge-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: ["http://127.0.0.1:3100/ready"]
+        labels:
+          service: forge_api
+      - targets: ["http://127.0.0.1:12088/health"]
+        labels:
+          service: cube_web
+      - targets: ["http://127.0.0.1:3001/health"]
+        labels:
+          service: cube_api
+      - targets: ["http://127.0.0.1:3010/health"]
+        labels:
+          service: cube_ops
+      - targets: ["http://127.0.0.1:9998/v1/metrics/resource"]
+        labels:
+          service: cubelet_resource
+      - targets: ["http://127.0.0.1:29198/health"]
+        labels:
+          service: alert_sink
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:29115

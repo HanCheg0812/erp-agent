@@ -1,0 +1,10 @@
+apiVersion: 1
+
+datasources:
+  - name: Forge Prometheus
+    uid: forge-prometheus
+    type: prometheus
+    access: proxy
+    url: http://127.0.0.1:29190
+    isDefault: true
+    editable: false

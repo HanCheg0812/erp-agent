@@ -153,11 +153,11 @@ pub struct App {
     pub bucket: Option<Arc<s3::Bucket>>,
 }
 impl App {
-    pub async fn connect() -> anyhow::Result<Self> {
+    pub async fn connect(pool_max_size: usize) -> anyhow::Result<Self> {
         let mut config: tokio_postgres::Config = std::env::var("DATABASE_URL")?.parse()?;
         config.connect_timeout(std::time::Duration::from_secs(5));
         let db = Pool::builder(Manager::new(config, NoTls))
-            .max_size(16)
+            .max_size(pool_max_size)
             .runtime(deadpool_postgres::Runtime::Tokio1)
             .wait_timeout(Some(std::time::Duration::from_secs(5)))
             .create_timeout(Some(std::time::Duration::from_secs(5)))
@@ -358,8 +358,24 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("../../migrations/20260924160000_create_knowledge_embedding_jobs.sql"),
     ),
     (
+        "20260925100000_add_agent_run_timings",
+        include_str!("../../migrations/20260925100000_add_agent_run_timings.sql"),
+    ),
+    (
+        "20260926100000_runtime_management",
+        include_str!("../../migrations/20260926100000_runtime_management.sql"),
+    ),
+    (
         "20260926110000_cube_quantity_tool",
         include_str!("../../migrations/20260926110000_cube_quantity_tool.sql"),
+    ),
+    (
+        "20260926120000_cube_browser_tool",
+        include_str!("../../migrations/20260926120000_cube_browser_tool.sql"),
+    ),
+    (
+        "20260926140000_cube_template_switch",
+        include_str!("../../migrations/20260926140000_cube_template_switch.sql"),
     ),
 ];
 const LEGACY_MIGRATION_IDS: &[(&str, &str)] = &[

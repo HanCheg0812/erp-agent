@@ -1,0 +1,163 @@
+groups:
+  - name: forge-agent-availability
+    interval: 15s
+    rules:
+      - alert: ForgeApiMetricsMissing
+        expr: up{job="forge-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: forge-api
+          source: forge
+        annotations:
+          summary: Forge API internal metrics are unavailable
+          description: Prometheus cannot scrape the private Forge metrics listener.
+
+      - alert: ForgeApiReadinessDown
+        expr: probe_success{job="forge-http",service="forge_api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: forge-api
+          source: forge
+        annotations:
+          summary: Forge API readiness probe is failing
+          description: The public Forge readiness endpoint is not returning a successful response.
+
+      - alert: CubeWebDown
+        expr: probe_success{job="forge-http",service="cube_web"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: cube-web
+          source: cube
+        annotations:
+          summary: Cube Web UI health probe is failing
+          description: The Cube Web UI health endpoint is unavailable.
+
+      - alert: CubeApiDown
+        expr: probe_success{job="forge-http",service="cube_api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: cube-api
+          source: cube
+        annotations:
+          summary: Cube API health probe is failing
+          description: The Cube API health endpoint is unavailable.
+
+      - alert: CubeOpsDown
+        expr: probe_success{job="forge-http",service="cube_ops"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: cube-ops
+          source: cube
+        annotations:
+          summary: CubeOps health probe is failing
+          description: The CubeOps health endpoint is unavailable.
+
+      - alert: ForgeAlertSinkDown
+        expr: probe_success{job="forge-http",service="alert_sink"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: alert-sink
+          source: forge
+        annotations:
+          summary: Local alert sink is unavailable
+          description: Alertmanager cannot deliver notifications to the local durable sink.
+
+      - alert: ForgeHealthSnapshotStale
+        expr: time() - forge_monitoring_snapshot_timestamp_seconds > 90
+        for: 2m
+        labels:
+          severity: warning
+          service: monitoring
+          source: forge
+        annotations:
+          summary: Forge host health snapshot is stale
+          description: The systemd timer has not produced a health snapshot for more than 90 seconds.
+
+      - alert: ForgeWorkersDegraded
+        expr: sum(forge_agent_worker_active) < 8
+        for: 2m
+        labels:
+          severity: critical
+          service: forge-workers
+          source: forge
+        annotations:
+          summary: Forge worker pool has fewer than eight active workers
+          description: One or more persistent worker units are inactive.
+
+  - name: cube-sandbox-availability
+    interval: 15s
+    rules:
+      - alert: CubeletResourceEndpointDown
+        expr: up{job="cubelet-resource"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: cubelet
+          source: cube
+        annotations:
+          summary: Cubelet resource metrics endpoint is unavailable
+          description: Prometheus cannot scrape Cubelet's native sandbox resource metrics endpoint.
+
+      - alert: CubeSystemServiceInactive
+        expr: min by (unit) (forge_cube_service_active) < 1
+        for: 2m
+        labels:
+          severity: critical
+          service: cube-runtime
+          source: cube
+        annotations:
+          summary: Cube system service is inactive
+          description: A CubeSandbox systemd unit reported inactive in the host health snapshot.
+
+      - alert: CubeSandboxMemoryLimitFailures
+        expr: increase(cubesandbox_host_sandbox_memory_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: cube-sandbox
+          source: cube
+        annotations:
+          summary: Cube sandbox memory limit failures increased
+          description: One or more Cube sandboxes reported host-side memory limit failures in the last five minutes.
+
+  - name: forge-agent-storage
+    interval: 15s
+    rules:
+      - alert: ForgePostgresExporterDown
+        expr: up{job="postgres-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: postgres
+          source: storage
+        annotations:
+          summary: PostgreSQL exporter is unavailable
+          description: Prometheus cannot read database health metrics.
+
+      - alert: ForgeDatabasePoolExhaustion
+        expr: (forge_api_database_pool_size > 0) and ((forge_api_database_pool_available / forge_api_database_pool_size) < 0.1)
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+          source: storage
+        annotations:
+          summary: Forge database pool has fewer than ten percent available connections
+          description: Check database latency, worker concurrency, and pool waiters.
+
+      - alert: ForgeDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) < 0.10
+        for: 10m
+        labels:
+          severity: warning
+          service: host
+          source: host
+        annotations:
+          summary: Root filesystem has less than ten percent free space
+          description: Persistent databases, Cube state, or monitoring history may stop accepting writes.

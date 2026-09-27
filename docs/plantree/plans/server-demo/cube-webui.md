@@ -66,7 +66,7 @@ docker exec cube-webui /usr/local/openresty/nginx/sbin/nginx -t
 
 - 概览把旧节点纳入总容量，显示 96 核、155 GiB 和 310 槽位；当前健康节点实际报告 48 核、77.8 GiB 和 155 槽位。节点列表虽仍显示旧记录的 Ready=True，但心跳约 7 天前，不能据此认定在线。
 - 失败模板是历史构建记录，不等于当前运行失败。页面保留了健康探针连接拒绝、VmShutdown 和未限定仓库的镜像拉取鉴权错误；部分记录没有错误详情，本轮未重试或删除。
-- 控制台的 API 请求监控实际为手动连通性检查。上述毫秒值不是模型延迟、沙箱冷启动指标或负载测试 P95。主栏目未见持久化时序曲线、告警管理或日志检索入口，不能将页面可访问等同于完整监控验收。
+- 控制台的 API 请求监控实际为手动连通性检查。上述毫秒值不是模型延迟、沙箱冷启动指标或负载测试 P95。Cube WebUI 本身未验证为 Prometheus/Alertmanager 告警管理入口；当前 Cube 部署已由旁侧的 Prometheus、Alertmanager 和 Grafana 持久化采集 Cube 端点、Cubelet 资源指标及 systemd 状态，具体证据见[监控部署记录](monitoring-deployment.md)。
 
 ## 待验证与边界
 
@@ -75,6 +75,12 @@ docker exec cube-webui /usr/local/openresty/nginx/sbin/nginx -t
 - 管理员仍使用官方默认凭据；本轮按现有账号登录，没有执行密码变更。管理入口的凭据强化尚未验收。
 - 开机恢复依据当前 systemd 依赖和 Docker 策略；本轮没有重启主机进行验收。
 - 未修改监听范围、防火墙、TLS 或管理 API 鉴权；本地访问成功不代表已完成公网部署。
-- 官方 Web UI 提供运行状态视图；长期指标存储、告警及 Forge 队列/模型/工具指标仍需独立验证。
+- 官方 Web UI 提供运行状态视图；长期指标存储与告警由 Cube 部署配套的 Prometheus/Alertmanager/Grafana 承担，当前已完成本机回环验证。Cube guest 工作负载指标、跨节点容量、外部通知以及 Forge 队列/模型/工具业务负载仍需独立验收。
+
+## 模板选择复核
+
+2026-09-26 后续核对：在已登录的原生 `/sandboxes/new` 页面，模拟数据关闭，READY 模板可以直接选择。实际选中 `tpl-5f913dc0f4b3471c92d2fb18` 浏览器模板后，模板高亮且“创建沙箱”按钮可用，截图已在对话中展示；本次没有点击创建。与官方 v0.7.2 的 `SandboxNew.tsx`、`SandboxDetail.tsx` 和 `api/client.ts` 对照，新建请求包含 `templateID`，已有通用实例详情提供暂停、恢复、销毁，没有原地替换模板接口。
+
+Cube Web 的模板选择不会自动建立 Forge 的租户/会话身份、Bridge 配置或工具映射；这部分现由 Rust API 的受控切换接口接线，仍不把 Cube Web 的通用实例直接当作业务会话。原生数字助手创建流程的模板选择目前属于 OpenClaw 路径。详细边界、切换行为和实际 JCode 浏览器工具验收见[模板接入计划](runtime-management.md#native-cube-web-template-selection)。
 
 官方资料：[Web UI](https://cubesandbox.com/zh/guide/webui)、[v0.7.2 对应文档](https://github.com/TencentCloud/CubeSandbox/blob/v0.7.2/docs/zh/guide/webui.md)。关联：[本地 Cube 运维](../../../../infra/cube/README.md)、[常驻运行时](cube-resident-runtime.md)。

@@ -59,6 +59,8 @@ pub async fn request(method: reqwest::Method, path: &str, body: Option<Value>) -
                 90
             } else if path == "cube/quantity-summary" {
                 60
+            } else if path == "cube/browser-browse" {
+                60
             } else {
                 10
             },

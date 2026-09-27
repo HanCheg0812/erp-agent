@@ -1,0 +1,22 @@
+[Unit]
+Description=Forge ERP Agent worker %i
+After=network-online.target erp-agent-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/erp-agent
+EnvironmentFile=-%h/erp-agent/.env
+EnvironmentFile=-%h/erp-agent/.runtime/deepseek.env
+EnvironmentFile=-%h/erp-agent/.runtime/integrations.env
+EnvironmentFile=-%h/erp-agent/.runtime/cube.env
+EnvironmentFile=%h/erp-agent/infra/systemd/erp-agent-worker.env
+ExecStart=%h/erp-agent/services/api/target/debug/erp-agent-api worker
+Restart=on-failure
+RestartSec=2s
+KillMode=mixed
+TimeoutStopSec=45s
+UMask=0027
+
+[Install]
+WantedBy=default.target

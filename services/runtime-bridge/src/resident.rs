@@ -164,6 +164,7 @@ fn allowed_config_key(key: &str) -> bool {
             | "AGENT_TURN_TIMEOUT_SECONDS"
             | "AGENT_COMPACTION_SOFT_RATIO"
             | "AGENT_COMPACTION_CRITICAL_RATIO"
+            | "FORGE_TEMP_BASH_PROBE"
             | "OPENAI_API_KEY"
             | "JCODE_OPENAI_MODEL"
             | "JCODE_OPENAI_API_BASE"
@@ -332,15 +333,24 @@ async fn turn(State(state): State<StateData>, headers: HeaderMap, body: Body) ->
                 if resident.is_some() && request.new_session {
                     anyhow::bail!("Resident instance is already bound to a JCode session");
                 }
+                let reused = resident.is_some();
+                let build_started = std::time::Instant::now();
                 if resident.is_none() {
                     *resident = Some(runtime::build(&request).await?);
                     state.agent_initialized.store(true, Ordering::Release);
                 }
+                let build_ms = build_started.elapsed().as_millis() as u64;
                 let runtime = resident.as_mut().expect("resident initialized");
                 if !runtime.accepts_case(&request) {
                     anyhow::bail!("Resident instance is bound to another case");
                 }
                 output_tx.send(runtime.catalog_event())?;
+                output_tx.send(json!({
+                    "type":"runtime_timing",
+                    "reused":reused,
+                    "build_ms":build_ms,
+                    "model_catalog_ms":if reused { 0 } else { runtime.model_catalog_ms }
+                }))?;
                 runtime::turn(runtime, &request, output_tx.clone()).await
             }
             .await;

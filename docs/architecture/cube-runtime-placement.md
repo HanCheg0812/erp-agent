@@ -1,6 +1,7 @@
 # JCode 放在 Cube 内还是外
 
-调研日期：2026-09-21。状态：设计建议；截至 2026-09-24，本地 resident Runtime Bridge 已实现，尚未运行真实 JCode + Cube 对照测试。
+调研日期：2026-09-21；实施状态复核：2026-09-25。当前方案 A 的真实 Cube/JCode
+合成回合、恢复和短时并发已验证；方案 B 仍保留作同口径性能对照，尚无完成的 A/B 测量。
 
 结论：两种方式均有 Cube 官方示例。结合本项目保留 JCode 完整 Harness、会话状态和案件文件的选择，优先验证“JCode + 常驻 Bridge 在 Cube 内”；保留外部运行作为性能对照。最终位置由隔离需求、恢复正确性和实测开销决定，不把之前架构图中的位置当作不可修改的决定。
 
@@ -16,7 +17,11 @@ Cube 官方仓库转载的[团队负责人访谈](https://github.com/TencentClou
 
 预热示例与自建 Runtime Bridge 最接近；它证明一种实现模式，不证明 JCode 已兼容。示例适配器的 HTTP 接口没有本项目所需的用户鉴权，不能直接作为产品服务使用。
 
-源码核对点：Cube `9d73cfd41212f45f4ff0d4a9038f91a585c0fa9a`；JCode `2a4edaa02057ac994a601311c4f03ed450e1b3c9`，已作为本仓库 submodule 固定。链接使用 upstream master 方便浏览，后续实施需再次核对对应固定版本。
+原始调研的源码核对点：Cube `9d73cfd41212f45f4ff0d4a9038f91a585c0fa9a`；
+JCode `2a4edaa02057ac994a601311c4f03ed450e1b3c9`。当前本地 Cube CLI 是 v0.7.2，
+本仓库 JCode submodule 的检出提交为 `6819cf87acdc6cc4e2c2c321148eb59c04d82749`
+并有未提交的会话存储改动；不能把原调研提交误当作当前运行版本。链接使用
+upstream master 方便浏览，实施应核对本地固定版本。
 
 ## 2. 两种部署
 
@@ -91,4 +96,21 @@ OpenViking/MinerU 保持独立服务。入库任务由持久队列和 Worker 处
 
 ## 6. 当前实施事实
 
-已实现 PostgreSQL 上的身份、案件、方案、审批、审计 API，已引入 JCode submodule，并在 `AGENT_RUNTIME_MODE=resident` 下实现本地 Runtime Bridge：它在进程内复用 JCode Agent、PostgreSQL session、技能目录和 ERP/OpenViking MCP 注册表。真实 Cube 模板注册、API 到 guest 的租约/短期 token 适配、Worker 切换、恢复隔离、知识库索引、异步解析和 Web 端到端验收仍未完成。以上部署与性能比较仍是下一阶段的验证计划。
+PostgreSQL 上的身份、案件、方案、审批、审计 API 已实现；`AGENT_RUNTIME_MODE=resident`
+的 Bridge 在 Cube guest 内复用 JCode Agent、PostgreSQL session、技能目录和受控 MCP
+注册表。业务 API/Worker 已通过案件绑定租约和短期 token 调用 guest。真实本地证据包括
+首轮/同实例续轮、API/Worker 重启后续轮、暂停恢复、销毁重建续轮、双案件隔离，以及
+50 用户各自独立实例的短提示冷/暖回合；范围、样本和异常见
+[Cube 常驻运行时记录](../plantree/plans/server-demo/cube-resident-runtime.md)。
+
+当前 Worker 以 PostgreSQL `agent_runs` 排队，多个进程消费；同一案件有唯一活跃运行
+约束和 advisory lock。八个独立 Worker 各配置八槽，本地 PostgreSQL 连接上限 200，
+API/Worker 默认池分别为 16/12；这些值对应本机短负载实测，不是生产容量。
+`AGENT_TURN_TIMEOUT_SECONDS=0` 默认不设总回合截止；Cube ready 等待单独配置，
+ERP/知识 HTTP 工具有各自请求超时。模型请求、工具、沙箱启动与客户端连接仍需按
+长期和混合负载梳理独立策略，不能用单个 150 秒截止代替。
+
+真实 OpenViking 索引与检索、异步解析、ERP 写入、跨节点恢复、长期混合负载，以及
+方案 B 相同模型/提示/工具的延迟和资源对照仍未验收。2026-09-25 本地 Cube 旧模板
+实际以 root 运行的偏差已通过入口降权和新模板真实探针修复；临时 Bash 工具已关闭，
+细节见上述运行时记录。

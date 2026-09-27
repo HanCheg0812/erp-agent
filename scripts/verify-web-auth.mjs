@@ -21,7 +21,7 @@ async function login(tab, credentials = account) {
   await tab.getByLabel('Email', { exact: true }).fill(credentials.email);
   await tab.getByLabel('Password', { exact: true }).fill(credentials.password);
   await tab.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await tab.getByText('My workspace', { exact: true }).waitFor({ state: 'attached' });
+  await tab.locator('.chat-app').waitFor({ state: 'attached' });
 }
 
 async function register(tab, credentials) {
@@ -61,6 +61,7 @@ async function revoke(tab) {
 try {
   await page.goto(origin);
   await assertSignedOut(page);
+  assert.equal(await page.getByRole('button', { name: 'View demo', exact: true }).count(), 0);
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
     await screenshot(`login-${width}`);
@@ -84,14 +85,7 @@ try {
   await assertSignedOut(page);
   report.checks.push('Incorrect credentials show a readable error and do not authenticate');
 
-  await page.getByRole('button', { name: 'View demo', exact: true }).click();
-  await page.getByText('Demo session', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await assertSignedOut(page);
-  await page.getByRole('button', { name: 'View demo', exact: true }).click();
-  await page.getByRole('button', { name: 'Leave demo', exact: true }).click();
-  await assertSignedOut(page);
-  report.checks.push('Demo is explicit; both sign-in and leave-demo controls return to auth');
+  report.checks.push('Unauthenticated entry has no demo session or simulated business data');
 
   await page.setViewportSize({ width: 390, height: 844 });
   await register(page, account);
@@ -141,6 +135,7 @@ try {
   await page.getByRole('alert').filter({ hasText: 'Your session has expired.' }).waitFor();
   await screenshot('expired-session');
   report.checks.push('401 during use returns both tabs to auth and displays expiration notice');
+  await tab.close();
 
   await login(page);
   await revoke(page);
@@ -152,7 +147,7 @@ try {
   await login(page);
   await page.route('**/v1/auth/me', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Temporary API outage' }) }));
   await page.reload();
-  await page.getByRole('heading', { name: 'Workspace unavailable', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Service unavailable', exact: true }).waitFor();
   assert.equal(await page.getByText('Demo session', { exact: true }).count(), 0);
   assert(await page.evaluate(key => localStorage.getItem(key), tokenKey));
   await page.unroute('**/v1/auth/me');
@@ -162,10 +157,12 @@ try {
 
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await assertSignedOut(page);
+  const accountTab = await context.newPage();
+  await accountTab.goto(origin);
   await register(page, second);
-  await tab.getByRole('heading', { name: 'No conversations yet', exact: true }).waitFor();
+  await accountTab.getByRole('heading', { name: 'No conversations yet', exact: true }).waitFor();
   assert.equal(await page.getByRole('heading', { name: caseTitle, exact: true }).count(), 0);
-  assert.equal(await tab.getByRole('heading', { name: caseTitle, exact: true }).count(), 0);
+  assert.equal(await accountTab.getByRole('heading', { name: caseTitle, exact: true }).count(), 0);
   const secondToken = await page.evaluate(key => localStorage.getItem(key), tokenKey);
   const crossAccount = await page.request.get(`${origin}/v1/cases/${report.case_id}`, { headers: { authorization: `Bearer ${secondToken}` } });
   assert([403, 404].includes(crossAccount.status()), 'Second account must not access first account case');

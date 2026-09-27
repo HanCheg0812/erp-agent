@@ -1,4 +1,4 @@
-use super::{lifecycle::operate, provider::configured, quantity_tool};
+use super::{browser_tool, lifecycle::operate, provider::configured, quantity_tool};
 use crate::{auth::Principal, platform::*};
 use std::sync::Arc;
 pub async fn sweep(app: App, stop: Arc<tokio_util::sync::CancellationToken>) {
@@ -8,6 +8,7 @@ pub async fn sweep(app: App, stop: Arc<tokio_util::sync::CancellationToken>) {
             continue;
         }
         quantity_tool::sweep_stale(&app).await;
+        browser_tool::sweep_stale(&app).await;
         if let Ok(db) = app.db.get().await {
             if let Ok(rows)=db.query("SELECT id,tenant_id,case_id,actor_id FROM case_sandboxes WHERE state<>'released' AND (expires_at<=now() OR state='releasing') ORDER BY expires_at LIMIT 20",&[]).await{
                 drop(db);

@@ -14,6 +14,7 @@ assert(Number.isInteger(sameCaseTurns) && sameCaseTurns >= 0 && sameCaseTurns <=
 const keepFailed = process.env.VERIFY_CUBE_KEEP_FAILED === '1';
 const resumeDelayMs = Number(process.env.VERIFY_CUBE_RESUME_DELAY_MS ?? 0);
 const output = process.env.VERIFY_CUBE_OUTPUT ?? `/tmp/erp-cube-acceptance/lifecycle-${Date.now()}`;
+const matchedPrompt = process.env.VERIFY_CUBE_MATCHED_PROMPT?.trim();
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 let token;
 let caseId;
@@ -62,7 +63,22 @@ async function send(text) {
     settings: { approval: 'ask', model: 'deepseek-flash', effort: 'low' },
     text,
   });
-  return { message_id: result.message.id, response: await waitForResponse(result.message.id) };
+  const response = await waitForResponse(result.message.id);
+  const timing = (await db.query(`
+    SELECT r.state,
+      round(extract(epoch from r.started_at - m.created_at)*1000)::int AS queue_ms,
+      round(extract(epoch from r.first_token_at - m.created_at)*1000)::int AS first_text_after_submit_ms,
+      round(extract(epoch from r.finished_at - m.created_at)*1000)::int AS total_ms,
+      r.timings
+    FROM agent_runs r JOIN case_conversation_messages m ON m.id=r.message_id
+    WHERE r.message_id=$1`, [result.message.id])).rows[0];
+  assert(timing, `Missing agent_run timing for ${result.message.id}`);
+  return { message_id: result.message.id, response, timing: {
+    queue_ms: timing.queue_ms,
+    first_text_after_submit_ms: timing.first_text_after_submit_ms,
+    total_ms: timing.total_ms,
+    ...(timing.timings?.at(-1) ?? {}),
+  } };
 }
 
 async function sandboxStatus() {
@@ -80,7 +96,12 @@ async function waitForSandbox(predicate) {
   throw new Error(`Timed out waiting for sandbox state: ${JSON.stringify(current)}`);
 }
 
-const report = { origin, cube_origin: cubeOrigin, case_id: null, steps: [], errors: [] };
+const report = {
+  origin, cube_origin: cubeOrigin, case_id: null, steps: [], errors: [],
+  workload: matchedPrompt
+    ? { same_prompt: true, note: 'Later turns include prior conversation history.' }
+    : { same_prompt: false },
+};
 await db.connect();
 try {
   token = (await api('/auth/login', 'POST', {
@@ -90,7 +111,7 @@ try {
   caseId = conversation.id;
   report.case_id = caseId;
 
-  const first = await send('请使用 ERP 只读工具读取一张订单，然后只回答订单号和数量，不修改业务数据。');
+  const first = await send(matchedPrompt ?? '请使用 ERP 只读工具读取一张订单，然后只回答订单号和数量，不修改业务数据。');
   assert.equal(first.response.state, 'completed', JSON.stringify(first.response));
   let status = await waitForSandbox(value => value.operation?.state === 'provisioned' && value.operation?.guest_ready === true);
   operationId = status.operation.id;
@@ -98,7 +119,7 @@ try {
   const firstSession = (await db.query(
     'SELECT session_id FROM case_sandboxes WHERE id=$1', [operationId],
   )).rows[0]?.session_id;
-  report.steps.push({ name: 'initial_turn', state: first.response.state, operation_id: operationId, sandbox_id: firstSandboxId, session_id: firstSession, tools: first.response.tools?.map(tool => tool.name) });
+  report.steps.push({ name: 'initial_turn', state: first.response.state, message_id: first.message_id, timing: first.timing, operation_id: operationId, sandbox_id: firstSandboxId, session_id: firstSession, tools: first.response.tools?.map(tool => tool.name) });
 
   for (let cycle = 1; cycle <= pauseCycles; cycle += 1) {
     const beforePause = await cube(`/sandboxes/${firstSandboxId}`);
@@ -119,7 +140,7 @@ try {
       await sleep(resumeDelayMs);
     }
 
-    const resumed = await send(`第 ${cycle} 次恢复后，请简短复述最初查询的订单号和数量，不要再次调用工具。`);
+    const resumed = await send(matchedPrompt ?? `第 ${cycle} 次恢复后，请简短复述最初查询的订单号和数量，不要再次调用工具。`);
     assert.equal(resumed.response.state, 'completed', JSON.stringify(resumed.response));
     status = await waitForSandbox(value => value.operation?.state === 'provisioned' && value.operation?.guest_ready === true);
     assert.equal(status.operation.id, operationId, 'Pause/resume created a new operation');
@@ -129,7 +150,7 @@ try {
     )).rows[0]?.session_id;
     assert.equal(resumedSession, firstSession, 'Pause/resume changed the PostgreSQL session');
     const afterResume = await cube(`/sandboxes/${firstSandboxId}`);
-    report.steps.push({ name: 'pause_resume_turn', cycle, state: resumed.response.state, cube_state: afterResume?.state, operation_id: status.operation.id, sandbox_id: status.operation.sandbox_id, session_id: resumedSession, tools: resumed.response.tools?.map(tool => tool.name), text_excerpt: resumed.response.text?.slice(0, 220) });
+    report.steps.push({ name: 'pause_resume_turn', cycle, state: resumed.response.state, message_id: resumed.message_id, timing: resumed.timing, cube_state: afterResume?.state, operation_id: status.operation.id, sandbox_id: status.operation.sandbox_id, session_id: resumedSession, tools: resumed.response.tools?.map(tool => tool.name), text_excerpt: resumed.response.text?.slice(0, 220) });
   }
 
   if (sameCaseTurns > 0) {
@@ -175,14 +196,14 @@ try {
   releasedOperationId = operationId;
   report.steps.push({ name: 'release_requested', state: released.operation?.state, operation_id: operationId });
   await waitForSandbox(value => value.operation?.state === 'released');
-  const recreated = await send('请只回答“会话已恢复”，不要调用工具。');
+  const recreated = await send(matchedPrompt ?? '请只回答“会话已恢复”，不要调用工具。');
   assert.equal(recreated.response.state, 'completed', JSON.stringify(recreated.response));
   status = await waitForSandbox(value => value.operation?.state === 'provisioned' && value.operation?.guest_ready === true);
   const secondOperationId = status.operation.id;
   const secondSession = (await db.query(
     'SELECT session_id FROM case_sandboxes WHERE id=$1', [secondOperationId],
   )).rows[0]?.session_id;
-  report.steps.push({ name: 'recreated_turn', state: recreated.response.state, operation_id: secondOperationId, sandbox_id: status.operation.sandbox_id, session_id: secondSession, same_session: firstSession === secondSession, new_sandbox: firstSandboxId !== status.operation.sandbox_id });
+  report.steps.push({ name: 'recreated_turn', state: recreated.response.state, message_id: recreated.message_id, timing: recreated.timing, operation_id: secondOperationId, sandbox_id: status.operation.sandbox_id, session_id: secondSession, same_session: firstSession === secondSession, new_sandbox: firstSandboxId !== status.operation.sandbox_id });
   operationId = secondOperationId;
 } catch (error) {
   report.errors.push(String(error));

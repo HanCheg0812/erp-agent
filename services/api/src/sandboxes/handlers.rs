@@ -1,4 +1,4 @@
-use super::lifecycle::operate;
+use super::lifecycle::{operate, switch_template};
 use crate::{auth::Principal, platform::*};
 use axum::{
     Extension, Json,
@@ -19,6 +19,12 @@ pub async fn status(
 struct Create {
     request_id: Uuid,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SwitchTemplate {
+    request_id: Uuid,
+    template_id: String,
+}
 pub async fn create(
     State(app): State<App>,
     Extension(actor): Extension<Principal>,
@@ -28,6 +34,17 @@ pub async fn create(
     let input: Create = parse(v)?;
     Ok(Json(
         operate(&app, &actor, id, "create", Some(input.request_id)).await?,
+    ))
+}
+pub async fn switch_template_route(
+    State(app): State<App>,
+    Extension(actor): Extension<Principal>,
+    Path(id): Path<Uuid>,
+    Json(v): Json<Value>,
+) -> Result<Json<Value>> {
+    let input: SwitchTemplate = parse(v)?;
+    Ok(Json(
+        switch_template(&app, &actor, id, input.request_id, input.template_id).await?,
     ))
 }
 pub async fn release(

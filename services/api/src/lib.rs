@@ -5,6 +5,7 @@ mod conversation;
 mod integrations;
 mod mcp_sessions;
 mod objects;
+mod observability;
 mod permissions;
 mod platform;
 mod sandboxes;
@@ -36,6 +37,10 @@ fn internal_router(app: App) -> Router {
         .route(
             "/internal/agent-sessions/{id}/cube/quantity-summary",
             post(sandboxes::summarize_quantities),
+        )
+        .route(
+            "/internal/agent-sessions/{id}/cube/browser-browse",
+            post(sandboxes::browse),
         )
         .route(
             "/internal/agent-sessions/{id}",
@@ -73,6 +78,7 @@ fn internal_router(app: App) -> Router {
             }),
         )
         .route("/ready", get(ready))
+        .route("/metrics", get(observability::metrics))
         .layer(DefaultBodyLimit::max(8 * 1024 * 1024))
         .layer(middleware::map_response(
             |mut response: axum::response::Response| async {
@@ -132,9 +138,20 @@ pub fn router(app: App) -> Router {
             get(sandboxes::status).post(sandboxes::create),
         )
         .route(
+            "/cases/{id}/sandbox/switch",
+            post(sandboxes::switch_template_route),
+        )
+        .route(
             "/cases/{id}/sandbox/{operation}",
             axum::routing::delete(sandboxes::release),
         )
+        .route("/runtime", get(sandboxes::overview))
+        .route("/runtime/candidates", post(sandboxes::create_candidate))
+        .route("/runtime/candidates/{id}", get(sandboxes::candidate))
+        .route("/runtime/candidates/{id}/build", post(sandboxes::build_candidate))
+        .route("/runtime/candidates/{id}/canary", post(sandboxes::create_canary))
+        .route("/runtime/candidates/{id}/activate", post(sandboxes::activate_candidate))
+        .route("/runtime/templates/{id}/adopt", post(sandboxes::adopt_template))
         .route(
             "/cases/{id}/documents",
             get(objects::list).post(objects::upload),
@@ -164,6 +181,10 @@ pub fn router(app: App) -> Router {
         .route(
             "/internal/agent-sessions/{id}/cube/quantity-summary",
             post(sandboxes::summarize_quantities),
+        )
+        .route(
+            "/internal/agent-sessions/{id}/cube/browser-browse",
+            post(sandboxes::browse),
         )
         .route(
             "/health",
@@ -225,8 +246,29 @@ pub async fn run() -> anyhow::Result<()> {
     if std::env::var("ERP_AGENT_LOAD_CUBE_ENV").as_deref() != Ok("0") {
         dotenvy::from_filename_override(".runtime/cube.env").ok();
     }
-    let app = App::connect().await?;
-    match std::env::args().nth(1).as_deref() {
+    let command = std::env::args().nth(1);
+    let worker_slots = match command.as_deref() {
+        Some("worker") => Some(worker::max_concurrent_runs()?),
+        Some("migrate" | "seed" | "storage-init") => None,
+        _ if platform::env("AGENT_WORKER_ENABLED", "1") == "1" => {
+            Some(worker::max_concurrent_runs()?)
+        }
+        _ => None,
+    };
+    let default_pool_size = if command.as_deref() == Some("worker") {
+        "12"
+    } else {
+        "16"
+    };
+    let pool_max_size: usize =
+        platform::env("DATABASE_POOL_MAX_SIZE", default_pool_size).parse()?;
+    anyhow::ensure!(
+        (1..=64).contains(&pool_max_size) && worker_slots.is_none_or(|slots| pool_max_size > slots),
+        "DATABASE_POOL_MAX_SIZE must be 1-64 and greater than worker slots"
+    );
+    eprintln!("Database pool max: {pool_max_size}");
+    let app = App::connect(pool_max_size).await?;
+    match command.as_deref() {
         Some("migrate") => {
             platform::migrate(&app).await?;
             return Ok(());

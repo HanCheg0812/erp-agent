@@ -1,0 +1,82 @@
+{
+  "uid": "cube-sandbox",
+  "title": "CubeSandbox Observability",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Cubelet resource scrape",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "targets": [{"refId": "A", "expr": "up{job=\"cubelet-resource\"}"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Cube control endpoints",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "targets": [{"refId": "A", "expr": "min(probe_success{job=\"forge-http\",service=~\"cube_web|cube_api|cube_ops\"})"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DEGRADED", "color": "red"}, "1": {"text": "UP", "color": "green"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Cube system services",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "targets": [{"refId": "A", "expr": "forge_cube_service_active", "legendFormat": "{{unit}}"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "unit": "short"}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Cube endpoint probes",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "targets": [{"refId": "A", "expr": "probe_success{job=\"forge-http\",service=~\"cube_web|cube_api|cube_ops|cubelet_resource\"}", "legendFormat": "{{service}}"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "unit": "short"}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Host sandbox memory",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "targets": [{"refId": "A", "expr": "cubesandbox_host_sandbox_memory_current_bytes", "legendFormat": "{{sandbox_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "bytes", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Guest workload memory",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "targets": [{"refId": "A", "expr": "cubesandbox_guest_workload_memory_current_bytes", "legendFormat": "{{sandbox_id}} / {{container_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "bytes", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Firing Cube alerts",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 21},
+      "targets": [{"refId": "A", "expr": "count(ALERTS{source=\"cube\",alertstate=\"firing\"}) or vector(0)"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Sandbox memory limit failures",
+      "gridPos": {"h": 8, "w": 18, "x": 6, "y": 21},
+      "targets": [{"refId": "A", "expr": "increase(cubesandbox_host_sandbox_memory_failures_total[5m])", "legendFormat": "{{sandbox_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    }
+  ]
+}

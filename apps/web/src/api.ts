@@ -67,6 +67,24 @@ export type AuditEvent = {
   created_at: string;
 };
 
+export type RuntimeCandidate = {
+  id: string; name: string; image: string; cpu_milli: number; memory_mib: number;
+  state: 'draft' | 'requested' | 'building' | 'ready' | 'failed' | 'unconfirmed';
+  source: 'build' | 'adopt'; template_id: string | null; job_id: string | null;
+  error_code: string | null; created_at: string;
+  build_request?: Record<string, unknown> | null;
+  canary?: { case_id?: string; ready: boolean; reason: string };
+};
+export type RuntimeOverview = {
+  active_release_id: string | null; version: number; legacy_template_id: string;
+  provider_available: boolean; sampled_at: string;
+  candidates: RuntimeCandidate[];
+  templates: Array<{ template_id: string; status: string; image: string; created_at: string; aliases: string[] }>;
+  nodes: Array<{ ip: string; healthy: boolean; status: string; cpu_total: number; memory_mib: number; disk_percent: number; sampled_at: string }>;
+  instances: Array<{ id: string; template_id: string | null; candidate_id: string | null; release_id: string | null; sandbox_id: string | null; state: string; guest_ready: boolean; created_at: string; checked_at: string | null; error_code: string | null }>;
+  releases: Array<{ id: string; candidate_id: string; template_id: string; created_at: string }>;
+};
+
 const API_URL = ((import.meta.env.VITE_API_URL as string | undefined) ?? '/v1').replace(/\/$/, '');
 const TOKEN_KEY = 'erp-agent-token';
 const AUTH_EVENT = 'erp-agent-auth-change';
@@ -165,6 +183,16 @@ export const api = {
       headers: { 'Idempotency-Key': retryKey },
       body: JSON.stringify(input),
     }),
+};
+
+export const runtimeApi = {
+  overview: () => request<RuntimeOverview>('/runtime'),
+  candidate: (id: string) => request<RuntimeCandidate>(`/runtime/candidates/${id}`),
+  create: (input: { request_id: string; name: string; image: string; cpu_milli: number; memory_mib: number }) => request<RuntimeCandidate>('/runtime/candidates', { method: 'POST', body: JSON.stringify(input) }),
+  build: (id: string) => request<RuntimeCandidate>(`/runtime/candidates/${id}/build`, { method: 'POST' }),
+  adopt: (id: string, input: { request_id: string; name: string }) => request<RuntimeCandidate>(`/runtime/templates/${encodeURIComponent(id)}/adopt`, { method: 'POST', body: JSON.stringify(input) }),
+  canary: (id: string) => request<{ case_id: string }>(`/runtime/candidates/${id}/canary`, { method: 'POST' }),
+  activate: (id: string, version: number) => request<{ release_id: string; version: number }>(`/runtime/candidates/${id}/activate`, { method: 'POST', body: JSON.stringify({ expected_version: version }) }),
 };
 
 export type PersonalMemory = { id: string; text: string; created_at: string };

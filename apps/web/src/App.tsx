@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Brain, Check, ClipboardCheck, Clock3, LogOut,
-  MessageSquare, Plus, RefreshCw, Search, ShieldCheck, X,
+  MessageSquare, Plus, RefreshCw, Search, Server, ShieldCheck, X,
 } from 'lucide-react';
 import {
   api, clearToken, getToken, subscribeAuthChange,
@@ -10,6 +10,7 @@ import {
 import { CaseChat, type ChatSession } from './CaseChat';
 import { PersonalMemory } from './PersonalMemory';
 import { AuthScreen } from './AuthScreen';
+import { RuntimeManagement } from './RuntimeManagement';
 
 const statusLabels: Record<CaseStatus, string> = {
   analyzing: 'Analyzing', awaiting_approval: 'Awaiting approval', approved: 'Approved', rejected: 'Rejected',
@@ -46,6 +47,7 @@ function Workspace() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [view, setView] = useState<'chat' | 'runtime'>('chat');
   const [modal, setModal] = useState<'create' | null>(null);
   const [refresh, setRefresh] = useState(0);
   const retries = useRef(new Map<string, string>());
@@ -119,7 +121,7 @@ function Workspace() {
       const record = await api.startConversation(conversationRequest.current);
       conversationRequest.current = null;
       setCases(items => [record, ...items.filter(item => item.id !== record.id)]);
-      setSelectedId(record.id); selectFilter('all');
+      setSelectedId(record.id); setView('chat'); selectFilter('all');
     } catch (reason) { setToast(errorMessage(reason)); }
     finally { pending.current = false; setSaving(false); }
   };
@@ -164,21 +166,24 @@ function Workspace() {
       <button className="button new-conversation" onClick={() => void startConversation()} disabled={!ready || saving || !roles.includes('planner')}><Plus size={16} />New conversation</button>
       <div className="conversation-search"><Search size={15} /><input aria-label="Search cases" placeholder="Search conversations" value={query} onChange={event => setQuery(event.target.value)} /><button className="icon-button" aria-label="Refresh cases" title="Refresh cases" onClick={() => setMode('connecting')} disabled={!ready}><RefreshCw size={14} /></button></div>
       <nav className="conversation-list" aria-label="Conversations">
-        {filteredCases.map(item => <CaseRow key={item.id} item={item} selected={selectedId === item.id} onClick={() => { setSelectedId(item.id); setMobileNav(false); }} />)}
+        {filteredCases.map(item => <CaseRow key={item.id} item={item} selected={view === 'chat' && selectedId === item.id} onClick={() => { setSelectedId(item.id); setView('chat'); setMobileNav(false); }} />)}
         {ready && !filteredCases.length && <div className="empty-state"><Search size={20} /><p>No matching conversations.</p>{cases.length > 0 && <button className="text-button" onClick={() => selectFilter('all')}>Clear filters</button>}</div>}
       </nav>
       <div className="sidebar-bottom">
+        {roles.includes('runtime_admin') && <button className={`review-queue runtime-nav ${view === 'runtime' ? 'selected' : ''}`} aria-current={view === 'runtime' ? 'page' : undefined} onClick={() => { setView('runtime'); setMobileNav(false); }}><Server size={16} /><span>Runtime</span></button>}
         <button className={`review-queue ${filter === 'awaiting_approval' ? 'selected' : ''}`} onClick={() => setFilter(filter === 'awaiting_approval' ? 'all' : 'awaiting_approval')}><ClipboardCheck size={16} /><span>Needs your review</span><span>{counts.awaiting_approval}</span></button>
         <div className="sidebar-account"><ShieldCheck size={18} /><div><strong>{ready ? 'Account' : 'Connection pending'}</strong><small title={email}>{email}</small></div><button className="icon-button" title="Personal memory" aria-label="Personal memory" onClick={() => setMemoryOpen(true)} disabled={!ready}><Brain size={16} /></button><button className="icon-button" onClick={disconnect} aria-label="Sign out" title="Sign out"><LogOut size={17} /></button></div>
       </div>
     </aside>
     <main className="chat-main">
+      {view === 'runtime' && ready ? <RuntimeManagement onBack={() => setView('chat')} onNavigation={() => setMobileNav(true)} onOpenCase={id => { setSelectedId(id); setView('chat'); setMobileNav(false); void api.getCase(id).then(record => setCases(items => [record, ...items.filter(item => item.id !== id)])).catch(reason => setToast(errorMessage(reason))); }} /> : <>
       {(!ready || loading || detailError || !detail) && <button className="icon-button conversation-toggle empty-navigation" onClick={() => setMobileNav(true)} aria-label="Open conversations" title="Open conversations"><MessageSquare size={18} /></button>}
       {!ready ? <div className="empty-state" role="status"><h2>{mode === 'connecting' ? 'Connecting' : 'Service unavailable'}</h2><p>{error || 'Loading conversations and account permissions.'}</p>{mode === 'error' && <button className="button secondary-button" onClick={() => setMode('connecting')}><RefreshCw size={15} />Retry</button>}</div>
         : loading && !detail ? <div className="empty-state" role="status">Loading conversation...</div>
         : detailError ? <div className="empty-state" role="alert"><p>{detailError}</p><button className="button secondary-button" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15} />Retry</button></div>
         : detail ? <CaseChat key={`${mode}-${detail.id}`} detail={detail} events={events} onDecide={decide} busy={saving} canApprove={roles.includes('approver')} onNavigation={() => setMobileNav(true)} session={chatSessions[detail.id] ?? { draft: '' }} onSession={session => setChatSessions(items => ({ ...items, [detail.id]: session }))} onSent={() => void updateConversationTitle(detail.id)} onVersionChange={() => setRefresh(value => value + 1)} onAddCaseDetails={roles.includes('planner') ? () => { setError(''); setModal('create'); } : undefined} />
         : <div className="empty-state"><MessageSquare size={26} /><h2>{cases.length ? 'No conversation selected' : 'No conversations yet'}</h2>{cases.length ? <button className="button secondary-button" onClick={() => setMobileNav(true)}>Open conversations</button> : roles.includes('planner') && <button className="button primary-button" disabled={saving} onClick={() => void startConversation()}><Plus size={16} />Start a conversation</button>}</div>}
+      </>}
     </main>
     {modal && detail && <Dialog title="Add case details" busy={saving} onClose={() => { setModal(null); setError(''); }}><form onSubmit={addCaseDetails} className="case-form">
       <label>Case title<input name="title" required maxLength={200} defaultValue={detail.title === 'New conversation' ? '' : detail.title} autoFocus /></label><div className="form-grid"><label>Customer code<input name="customer_code" required maxLength={100} /></label><label>Part number<input name="part_number" required maxLength={100} /></label><label>Revision<input name="revision" required maxLength={100} /></label><label>Demand type<select name="demand_type" defaultValue="order"><option value="order">Customer order</option><option value="forecast">Forecast</option><option value="delivery_instruction">Delivery instruction</option></select></label></div><label>Quantity basis<select name="quantity_basis" defaultValue="unknown"><option value="unknown">Unconfirmed</option><option value="replacement">Replacement total</option><option value="incremental">Incremental</option><option value="cumulative">Cumulative</option></select></label>

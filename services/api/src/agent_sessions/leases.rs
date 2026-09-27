@@ -9,7 +9,7 @@ pub(crate) async fn authorize(
 ) -> Result<(i32, i32, Option<Value>)> {
     session_id(id)?;
     let query = format!(
-        "SELECT s.revision,s.fence,s.metadata FROM agent_sessions s JOIN users u ON u.id=s.owner_id AND u.tenant_id=s.tenant_id JOIN cases c ON c.id=s.case_id AND c.tenant_id=s.tenant_id AND c.owner_id=s.owner_id WHERE s.id=$1 AND s.token_hash=$2 AND s.expires_at>now() AND u.active AND 'planner'=ANY(u.roles) FOR {} OF s",
+        "SELECT s.revision,s.fence,s.metadata FROM agent_sessions s JOIN users u ON u.id=s.owner_id AND u.tenant_id=s.tenant_id JOIN cases c ON c.id=s.case_id AND c.tenant_id=s.tenant_id AND c.owner_id=s.owner_id WHERE s.id=$1 AND (((s.token_hash=$2) AND s.expires_at>now()) OR EXISTS (SELECT 1 FROM agent_session_runtime_leases l WHERE l.session_id=s.id AND l.token_hash=$2 AND l.expires_at>now() AND l.revoked_at IS NULL)) AND u.active AND 'planner'=ANY(u.roles) FOR {} OF s",
         if write { "UPDATE" } else { "SHARE" }
     );
     let row = tx

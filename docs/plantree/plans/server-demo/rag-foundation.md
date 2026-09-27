@@ -16,7 +16,7 @@
 
 原始业务主线是客户需求变更分析：读取需求资料，结合 ERP 当前事实，给出有依据的影响分析、方案与人工审批。RAG 负责把适用的资料准确交给 Agent，尤其要区分客户、项目、料号、技术修订、需求修订、生效时间，以及增量/累计/替换总量口径。
 
-当前 JCode/DeepSeek 对话循环、Skill 发现/加载和 PostgreSQL 会话恢复已经验证；RustFS 原件上传和授权下载已实现，但聊天消息尚未绑定附件，JCode Bridge 仍只收到文字。Rust 解析库具备配置继承与可替换后端契约，真实解析任务、OpenViking 检索和 MinerU 尚未接入。Web 演示中的知识引用是合成资料，真实侧栏目前只有保存的引用字段。
+当前 JCode/DeepSeek 对话循环、Skill 发现/加载和 PostgreSQL 会话恢复已经验证；RustFS 原件上传和授权下载、聊天消息附件绑定、JCode 图片输入及一张合成图片的真实问答也已验证，见[附件记录](chat-attachment-agent-design.md)。Rust 解析库具备配置继承与可替换后端契约，真实解析任务、OpenViking 检索和 MinerU 尚未接入。Web 演示中的知识引用是合成资料，真实侧栏目前只有保存的引用字段。
 
 下一阶段先验证两类图片的上传、解析、问答与原文定位。不以“服务启动成功”代表 RAG 效果提升，也不在本阶段加入 CAD 编辑、几何测量、精细排产或自动 ERP 写入。
 
@@ -72,7 +72,7 @@ MinerU 的具体图片接口、图纸符号表现及坐标输出需要用锁定�
 
 新核查的 MinerU 官方 Skill 面向 4.x，提供 `parse/read`、质量档位和页/块 locator，不能假定与上述 `/file_parse` 适配直接兼容。先验证选定版本的接口；把原生 locator、解析配置及产物绑定到业务文档版本。缓存 ID 和块号不能脱离原件哈希与解析版本充当永久引用。
 
-当前专用 DeepSeek 配置已验证文字对话；官方 [图像理解文档](https://api-docs.deepseek.com/zh-cn/guides/vision)说明 Flash 支持 Responses 图片输入，固定 JCode 版本已有 `ContentBlock::Image`，但 Forge 尚未把附件送进回合，也未做真实视觉探针。向量模型尚未配置；不继承开发者登录。上传图片供文字问答与“以图搜图”是不同能力：前者可先用即时看图或 OCR/视觉描述配合文本向量，后者需要多模态向量，并通过对照评测决定是否进入首轮。
+当前专用 DeepSeek 配置已验证文字对话；Flash Responses 图片输入与固定 JCode 版本的 `ContentBlock::Image` 已通过一张合成 PNG 上数字 `7392` 的真实问答探针，范围见[附件记录](chat-attachment-agent-design.md)。向量模型尚未配置；不继承开发者登录。上传图片供文字问答与“以图搜图”是不同能力：前者可先用即时看图或 OCR/视觉描述配合文本向量，后者需要多模态向量，并通过对照评测决定是否进入首轮。
 
 ## 检索与 Agent Loop
 

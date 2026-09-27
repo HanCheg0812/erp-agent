@@ -2,7 +2,7 @@
 
 面向民品生产运营的服务器端智能体 Demo：客户需求变更 → 影响分析 → 人工确认 → ERP 执行跟踪。
 
-当前状态：灰白 Chat Web 已通过 Rust 业务 API 接入 JCode Rust Loop 和 DeepSeek 原生 Responses API。个人邮箱注册/登录、用户隔离、RustFS 私有原件、真实案件读取、todo、连续对话、Skill 发现/加载、PostgreSQL 恢复和真实上下文压缩已验证。聊天附件可随消息持久绑定；PNG/JPEG/WebP 可经 RustFS 和 JCode 交给 DeepSeek Flash，即时图片问答已通过[真实合成图探针](docs/plantree/plans/server-demo/chat-attachment-agent-design.md)。PDF、DOCX、XLSX、MD、TXT 现有 Rust 即时读取路径和受限 `attachment_read` 续读工具，解析器与授权链路通过本地测试，尚未完成真实模型对每种格式的逐一验收。ERP/OpenViking 两个 Rust MCP 服务及四个工具已注册，真实 ERPNext 列表/明细读取通过；TEI 本地 Docker 配置已添加但尚未完成镜像/模型下载与推理验收，OpenViking 服务、持久索引和 RAG 仍未完成。模型/思考程度、输入框自增高、真实停止和三种操作授权已实现；当前回合的授权上下文会注入 JCode，并由 `case_read` 返回，业务审批单独要求人工 approver。默认回合总时限已关闭，流式中断和恢复修复见[验证记录](docs/plantree/plans/server-demo/stream-recovery-fix.md)。本地 Cube v0.7.2 常驻 Harness 已完成合成案件首轮、续轮、API/Worker 重启后续轮，以及两次独立的暂停恢复和销毁重建续轮；宿主机路径保留用于对照，单实例多次暂停、50 用户容量和完整业务验收仍待验证。
+当前状态：灰白 Chat Web 已通过 Rust 业务 API 接入 JCode Rust Loop 和 DeepSeek 原生 Responses API。个人邮箱注册/登录、用户隔离、RustFS 私有原件、真实案件读取、todo、连续对话、Skill 发现/加载、PostgreSQL 恢复和真实上下文压缩已验证。聊天附件可随消息持久绑定；PNG/JPEG/WebP 可经 RustFS 和 JCode 交给 DeepSeek Flash，即时图片问答已通过[真实合成图探针](docs/plantree/plans/server-demo/chat-attachment-agent-design.md)。PDF、DOCX、XLSX、MD、TXT 现有 Rust 即时读取路径和受限 `attachment_read` 续读工具，解析器与授权链路通过本地测试，尚未完成真实模型对每种格式的逐一验收。ERP/OpenViking 两个 Rust MCP 服务及四个工具已注册，真实 ERPNext 列表/明细读取通过；TEI 本地 Docker 配置已添加但尚未完成镜像/模型下载与推理验收，OpenViking 服务、持久索引和 RAG 仍未完成。模型/思考程度、输入框自增高、真实停止和三种操作授权已实现；当前回合的授权上下文会注入 JCode，并由 `case_read` 返回，业务审批单独要求人工 approver。默认回合总时限已关闭，流式中断和恢复修复见[验证记录](docs/plantree/plans/server-demo/stream-recovery-fix.md)。本地 Cube v0.7.2 常驻 Harness 已完成合成案件首轮、续轮、API/Worker 重启后续轮、同实例三次暂停恢复、销毁重建续轮和 50 用户并发探针；宿主机路径保留用于对照，同口径延迟归因、长期混合负载和完整业务验收仍待验证，见[Cube 运行时记录](docs/plantree/plans/server-demo/cube-resident-runtime.md)。
 
 ## 已确定方向
 
@@ -70,9 +70,9 @@ API 默认 `http://127.0.0.1:3100`；`/health` 检查进程，`/ready` 检查数
 
 模型运行还需要 Rust 工具链：执行 `npm run agent:build`，在已忽略的 `.runtime/deepseek.env` 中配置专用 `DEEPSEEK_API_KEY`，权限设为 0600。`npm run dev:api` 自动加载此文件；默认地址为 `https://api.deepseek.com`，默认模型为 `deepseek-flash`，可用 `DEEPSEEK_MODEL` 显式选择。配置和运行约束见 [Runtime Bridge](services/runtime-bridge/README.md)。没有模型配置时只保存新输入，不排队补跑历史消息。
 
-独立消费进程：先运行迁移，再以 `AGENT_WORKER_ENABLED=0 npm run dev:api` 启动 HTTP API，然后运行 `npm run dev:workers` 启动/重启 8 个用户级 Rust worker。每个 worker 的 `AGENT_MAX_CONCURRENT_RUNS` 默认 4、最大 8；总槽位是进程数乘以单进程槽位，须结合模型、数据库和 Cube 实测调节。任务仍在一张 PostgreSQL `agent_runs` 表中持久化，多个 worker 由数据库通知唤醒并通过案件锁保持同一会话顺序。[50 用户本地探针](docs/plantree/plans/server-demo/agent-runtime-concurrency.md)只验证受控 Runtime 的调度，不代表真实模型或 Cube 业务容量。
+独立消费进程：先运行迁移，再以 `AGENT_WORKER_ENABLED=0 npm run dev:api` 启动 HTTP API，然后运行 `npm run dev:workers` 启动/重启 8 个用户级 Rust worker。启动脚本为每个 worker 设置 `AGENT_MAX_CONCURRENT_RUNS=8`，Rust 进程未显式设置时默认 4、最大 8；总槽位是进程数乘以单进程槽位，须结合模型、数据库和 Cube 实测调节。任务仍在一张 PostgreSQL `agent_runs` 表中持久化，多个 worker 由数据库通知唤醒并通过案件锁保持同一会话顺序。[受控 Runtime 调度探针](docs/plantree/plans/server-demo/agent-runtime-concurrency.md)与[真实 Cube/JCode 50 用户探针](docs/plantree/plans/server-demo/cube-resident-runtime.md)应分别解读。
 
-本地 PostgreSQL 默认允许 200 个连接，可用 `POSTGRES_MAX_CONNECTIONS` 调整。API 和每个 worker 各有独立连接池，活跃 Agent 回合会持有案件锁连接；[真实 50 用户探针](docs/plantree/plans/server-demo/agent-runtime-concurrency.md)在旧的 100 连接上限遇到连接耗尽，调整后才达到 50 路并发。连接数、内存和模型限流必须与槽位一起评估。
+本地 PostgreSQL 默认允许 200 个连接，可用 `POSTGRES_MAX_CONNECTIONS` 调整。API 和每个 worker 各有独立连接池；独立 worker 的默认池上限为 12，API 为 16，可用 `DATABASE_POOL_MAX_SIZE` 按进程覆盖，且池上限必须大于该进程的并发槽位。活跃 Agent 回合会持有案件锁连接；Cube guest 通过受限 HTTP 调用 Rust API，由 API 使用数据库池，guest 本身不直接连接 PostgreSQL；通知监听使用独立连接。[真实 50 用户探针](docs/plantree/plans/server-demo/agent-runtime-concurrency.md)在旧的 100 连接上限遇到连接耗尽，调整后才达到 50 路并发。连接数、内存和模型限流必须与槽位一起评估。
 
 文档 RAG 的 embedding 推理服务由本机 Docker Compose 单独运行，模型缓存持久保留，HTTP 仅绑定 `127.0.0.1:8080`。先执行 `npm run dev:init` 补齐非敏感配置，再用 `npm run embedding:up` 启动 CPU 版 TEI；装好 NVIDIA Container Toolkit 后可改用 `npm run embedding:up:gpu`。模型就绪后，在 `embedding_models` 登记 BGE-M3 并运行 `npm run dev:embedding-worker`，具体命令见 [ingestion-worker 说明](services/ingestion-worker/README.md)。目前解析产物尚未接入文档队列，启动服务不等于 RAG 已可用。
 
@@ -82,10 +82,10 @@ API 默认 `http://127.0.0.1:3100`；`/health` 检查进程，`/ready` 检查数
 
 API 契约和当前业务限制见 [services/api](services/api/README.md)。本地数据库账号是开发配置，不作为生产权限配置。
 
-Cube 通过本地 `.env` 中的 `CUBE_API_URL`、`CUBE_TEMPLATE_ID` 和可选 `CUBE_PROXY_URL` 接入；运行版本、修复步骤及过期回收限制见 [infra/cube](infra/cube/README.md)。基础设施状态保留在后台，不显示在业务聊天中。本地验收依据见[联调记录](docs/plantree/plans/server-demo/web-api-integration.md)。
+Cube 通过本地 `.env` 中的 `CUBE_API_URL`、`CUBE_TEMPLATE_ID` 和可选 `CUBE_PROXY_URL` 接入；存在 `.runtime/cube.env` 时，Rust API/Worker 启动后由该文件覆盖 Cube 配置。修改模板 ID 后必须重启运行进程，真实并发验收脚本会核对 Cube 实例实际使用的模板。运行版本、修复步骤及过期回收限制见 [infra/cube](infra/cube/README.md)。基础设施状态保留在后台，不显示在业务聊天中。本地验收依据见[联调记录](docs/plantree/plans/server-demo/web-api-integration.md)。
 
 ## 当前下一步
 
-在 RustFS 原件上传和即时读取基础上实现 MinerU/视觉解析、文档持久任务和真实 OpenViking 检索。Cube 常驻 JCode 已通过同案件暂停恢复、销毁重建、旧 token 拒绝和 50 用户冷/暖两轮真实并发；下一步转向写操作断线、跨节点迁移、长期混合负载及宿主机对照。当前开放 `case_read`、`attachment_read`、`todo`、`skill_find`、只读 `skill_manage`、受授权控制的 `memory_save`、`case_set_context`、`proposal_create`、独立的人工作业 `request_proposal_approval` 及四个 ERP/知识 MCP 工具；批准提案仍不执行 ERP 写入。
+在 RustFS 原件上传和即时读取基础上实现 MinerU/视觉解析、文档持久任务和真实 OpenViking 检索。Cube 常驻 JCode 已通过同案件暂停恢复、销毁重建、旧 token 拒绝和 50 用户冷/暖两轮真实并发；当前模板的算术短提示虽然 100/100 完成，只有 93/100 回复正确，见[运行时记录](docs/plantree/plans/server-demo/cube-resident-runtime.md)。下一步转向 guest 资源指标、正确率对照、写操作断线、跨节点迁移和长期混合负载。当前开放 `case_read`、`attachment_read`、`todo`、`skill_find`、只读 `skill_manage`、受授权控制的 `memory_save`、`case_set_context`、`proposal_create`、独立的人工作业 `request_proposal_approval` 及四个 ERP/知识 MCP 工具；批准提案仍不执行 ERP 写入。
 
 此项目由 2026-09-21 架构讨论初始化。实际目录为 `/home/axia/erp-agent`；原讨论产物保留。

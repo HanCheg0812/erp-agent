@@ -23,7 +23,8 @@
 .sidebar-bottom { flex-shrink: 0; padding-top: 18px; }
 .review-queue { display: flex; align-items: center; width: 100%; gap: 10px; padding: 13px 10px; border: 0; background: transparent; color: #555555; font-size: 11px; border-radius: 4px; margin-bottom: 17px; }
 .review-queue:hover, .review-queue.selected { background: #ededed; }
-.review-queue > span:last-child { display: grid; place-items: center; margin-left: auto; width: 20px; height: 20px; border: 1px solid #dddddd; border-radius: 4px; font: 10px var(--mono); }
+.runtime-nav { margin-bottom: 2px; }
+.review-queue:not(.runtime-nav) > span:last-child { display: grid; place-items: center; margin-left: auto; width: 20px; height: 20px; border: 1px solid #dddddd; border-radius: 4px; font: 10px var(--mono); }
 .sidebar-account { border-top: 1px solid #e1e1e1; display: flex; align-items: center; gap: 9px; min-height: 74px; padding: 12px 7px; color: #616161; }
 .sidebar-account > div { flex: 1; }
 .sidebar-account strong { display: block; font-size: 11px; font-weight: 550; }

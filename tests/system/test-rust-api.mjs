@@ -22,12 +22,16 @@ const name = `erp_rust_test_${randomBytes(8).toString('hex')}`;
 await admin.query(`CREATE DATABASE ${name}`);
 const url = new URL(process.env.DATABASE_URL); url.pathname = name;
 const db = new pg.Client({ connectionString: url.href }); await db.connect();
-let child; let second; let logs = ''; let creates = 0; let erpRequests = 0; const erpAuthHeaders = []; let remote = null; let loseCreate = false; let uncertainDelete = false; let cubeTurnCompleted = false;
+let child; let second; let logs = ''; let creates = 0; let templateBuilds = 0; let runtimeCanaryCaseId = null; let erpRequests = 0; const erpAuthHeaders = []; let remote = null; const remotes = new Map(); let sandboxSequence = 0; let loseCreate = false; let createFailure = false; let lateCreate = false; let hideLateCreateOnce = false; let uncertainDelete = false; let cubeTurnCompleted = false;
+const runtimeImage = `127.0.0.1:5000/forge-agent-runtime:test@sha256:${'a'.repeat(64)}`;
+const managedTemplate = templateID => ({ templateID, status: 'READY', imageInfo: runtimeImage, createdAt: '2026-09-26T00:00:00Z', replicas: [{ status: 'READY', node_ip: '127.0.0.1' }], createRequest: { network_type: 'tap', containers: [{ command: ['/usr/local/bin/resident-start.sh'], envs: Object.entries({ CUBE_TEMPLATE_WARMUP: '1', AGENT_RUNTIME_MODE: 'resident', AGENT_RUNTIME_BIND: '0.0.0.0:49999', HOME: '/home/forge', JCODE_HOME: '/home/forge/jcode' }).map(([key, value]) => ({ key, value })), security_context: { privileged: false }, resources: { cpu: '750m', mem: '1024Mi' }, probe: { probe_handler: { http_get: { port: 49999, path: '/health/ready' } } } }] } });
 const originals = originalStorageFixture();
 const quantities = cubeQuantityFixture();
 const cube = createServer(async (req, res) => {
   const chunks = []; for await (const chunk of req) chunks.push(chunk);
   const bytes = Buffer.concat(chunks);
+  const sandboxPath = req.url?.match(/^\/sandboxes\/([^/?]+)/)?.[1];
+  const sandboxId = sandboxPath ? decodeURIComponent(sandboxPath) : null;
   if (originals.handle(req, res, bytes)) return;
   if (await quantities.handle(req, res, bytes)) return;
   const input = bytes.toString('utf8');
@@ -63,10 +67,25 @@ const cube = createServer(async (req, res) => {
     return res.end(JSON.stringify({result:{resources:[{uri:'viking://resources/test/user/doc',abstract:'Evidence'},{uri:'viking://resources/test/other/doc',abstract:'Private'}]}}));
   }
   if (req.url.startsWith('/api/v1/content/read')) return res.end(JSON.stringify({result:'Authorized source text'}));
+  if (req.url === '/templates' && req.method === 'GET') return res.end(JSON.stringify([managedTemplate('tpl-managed'), { templateID: 'tpl-other', status: 'READY', imageInfo: 'docker.io/other:latest' }, managedTemplate('tpl-invalid-env')]));
+  if (req.url === '/templates' && req.method === 'POST') {
+    const body = JSON.parse(input); templateBuilds++;
+    assert.deepEqual(body.command, ['/usr/local/bin/resident-start.sh']);
+    assert.deepEqual(body.exposedPorts, [49999]);
+    assert.equal(body.probePort, 49999);
+    assert.equal(body.probePath, '/health/ready');
+    assert.equal(body.allowInternetAccess, false);
+    assert.equal(body.image, runtimeImage);
+    assert.equal(body.registryPassword, undefined);
+    return res.end(JSON.stringify({ jobID: 'job-built', templateID: 'tpl-built' }));
+  }
   if (req.url === '/templates/test') return res.end(JSON.stringify({ status: 'READY', replicas: [{ status: 'READY', node_ip: '127.0.0.1' }] }));
+  if (req.url === '/templates/tpl-built' || req.url === '/templates/tpl-managed') return res.end(JSON.stringify(managedTemplate(req.url.split('/').at(-1))));
+  if (req.url === '/templates/tpl-invalid-env') { const template = managedTemplate('tpl-invalid-env'); template.createRequest.containers[0].envs[0].value = '0'; return res.end(JSON.stringify(template)); }
+  if (req.url === '/templates/tpl-other') return res.end(JSON.stringify({ status: 'READY', createRequest: { containers: [{ command: ['/bin/sh'] }] } }));
   if (req.url === '/internal/v1/nodes') return res.end(JSON.stringify([{ IP: '127.0.0.1', Healthy: true }]));
   if (req.url === '/sandboxes' && req.method === 'POST') {
-    creates++; const body = JSON.parse(input); remote = { sandboxID: 'test-sandbox', templateID: 'test', state: 'running', metadata: body.metadata };
+    creates++; const body = JSON.parse(input); const createdId = sandboxSequence++ === 0 ? 'test-sandbox' : `test-sandbox-${sandboxSequence}`; const created = { sandboxID: createdId, templateID: body.templateID, state: 'running', metadata: body.metadata }; remotes.set(createdId, created); remote = created;
     if (env.AGENT_EXECUTION_BACKEND === 'cube') {
       assert.equal(body.allow_internet_access, false);
       assert(Array.isArray(body.network?.allow_out));
@@ -74,34 +93,48 @@ const cube = createServer(async (req, res) => {
       assert.equal(body.cube_network_config, undefined);
       assert.equal(body.envVars, undefined);
     }
+    if (createFailure) { remotes.delete(createdId); remote = [...remotes.values()].at(-1) ?? null; res.statusCode = 500; return res.end(JSON.stringify({ error: 'synthetic create failure' })); }
+    if (lateCreate) { lateCreate = false; hideLateCreateOnce = true; res.statusCode = 500; return res.end(JSON.stringify({ error: 'synthetic delayed create' })); }
     if (loseCreate) return req.socket.destroy();
     return res.end(JSON.stringify(remote));
   }
-  if (req.url.startsWith('/sandboxes?')) return res.end(JSON.stringify(remote ? [remote] : []));
-  if (req.url === '/sandboxes/test-sandbox') {
-    if (req.method === 'DELETE') { if (!uncertainDelete) remote = null; res.statusCode = 204; return res.end(); }
-    if (!remote) res.statusCode = 404;
-    return res.end(JSON.stringify(remote));
+  if (req.url.startsWith('/sandboxes?')) {
+    if (hideLateCreateOnce) { hideLateCreateOnce = false; return res.end('[]'); }
+    return res.end(JSON.stringify([...remotes.values()]));
   }
-  if (req.url === '/sandbox/test-sandbox/49999/health/ready') return res.end(JSON.stringify({ status: 'ready', mode: 'resident', warmup: false }));
-  if (req.url === '/sandbox/test-sandbox/49999/v1/configure') {
+  if (sandboxId) {
+    const stored = remotes.get(sandboxId);
+    if (req.method === 'DELETE') { if (!uncertainDelete) remotes.delete(sandboxId); remote = [...remotes.values()].at(-1) ?? null; res.statusCode = 204; return res.end(); }
+    if (!stored) res.statusCode = 404;
+    return res.end(JSON.stringify(stored));
+  }
+  if (req.url?.match(/^\/sandbox\/[^/]+\/49999\/health\/ready$/)) return res.end(JSON.stringify({ status: 'ready', mode: 'resident', warmup: false }));
+  if (req.url?.match(/^\/sandbox\/[^/]+\/49999\/v1\/configure$/)) {
     assert.equal(req.method, 'POST');
     const config = JSON.parse(input).env;
     assert.equal(config.CUBE_TEMPLATE_WARMUP, '0');
     assert.equal(config.AGENT_RUNTIME_MODE, 'resident');
+    assert.equal(config.FORGE_TEMP_BASH_PROBE, env.AGENT_TEMP_BASH_PROBE ?? '0');
     assert(config.JCODE_MCP_SESSION_ID.startsWith('mcp_'));
     return res.end(JSON.stringify({ status: 'ready' }));
   }
-  if (req.url === '/sandbox/test-sandbox/49999/v1/turn') {
+  if (req.url?.match(/^\/sandbox\/[^/]+\/49999\/v1\/turn$/)) {
     const request = JSON.parse(input);
-    const expected = createHmac('sha256', env.CUBE_RUNTIME_SHARED_SECRET).update('erp-agent/cube-runtime/v1/').update(Buffer.from(remote.metadata.erp_operation.replaceAll('-', ''), 'hex')).digest('hex');
+    const turnId = req.url.split('/')[2];
+    const turnRemote = remotes.get(turnId);
+    assert(turnRemote);
+    const expected = createHmac('sha256', env.CUBE_RUNTIME_SHARED_SECRET).update('erp-agent/cube-runtime/v1/').update(Buffer.from(turnRemote.metadata.erp_operation.replaceAll('-', ''), 'hex')).digest('hex');
     assert.equal(req.headers['x-agent-runtime-token'], expected);
-    assert.equal(request.case.id, remote.metadata.erp_case);
+    assert.equal(request.case.id, turnRemote.metadata.erp_case);
     assert.equal(request.new_session, true);
     res.setHeader('content-type', 'application/x-ndjson');
     const source = 'Synthetic test guidance';
     const snapshot = JSON.stringify({ schema_version: 1, id: 'test@1', skills: [{ id: 'test-review', version: '1.0.0', source, sha256: createHash('sha256').update(source).digest('hex') }] });
     res.write(`${JSON.stringify({ type: 'skill_catalog', snapshot, hash: createHash('sha256').update(snapshot).digest('hex') })}\n`);
+    if (request.case.id === runtimeCanaryCaseId) {
+      res.write(`${JSON.stringify({ type: 'tool_start', id: 'canary-read', name: 'case_read' })}\n`);
+      res.write(`${JSON.stringify({ type: 'tool_done', id: 'canary-read', name: 'case_read', failed: false })}\n`);
+    }
     await new Promise(resolve => setTimeout(resolve, 150));
     res.write(`${JSON.stringify({ type: 'text_delta', text: 'Streamed from Cube' })}\n`);
     await new Promise(resolve => setTimeout(resolve, 650));
@@ -115,8 +148,9 @@ const cube = createServer(async (req, res) => {
 cube.listen(0, '127.0.0.1'); await once(cube, 'listening');
 const listener = createServer(); listener.listen(0, '127.0.0.1'); await once(listener, 'listening'); const port = listener.address().port; await new Promise(resolve => listener.close(resolve));
 const origin = `http://127.0.0.1:${port}`;
-const env = { ...process.env, ERP_AGENT_LOAD_CUBE_ENV:'0', API_INTERNAL_HOST:'', DATABASE_URL: url.href, API_PORT: String(port), DEEPSEEK_API_KEY: '', ERP_API_TOKEN:'synthetic-erp', ERP_CREDENTIAL_FORGE_READER:'forge-reader-token', ERP_CREDENTIAL_LIMITED_READER:'limited-reader-token', ERP_API_URL:`http://127.0.0.1:${cube.address().port}`, ERP_SHARED_DEMO_MODE:'true', OPENVIKING_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_API_KEY:'', CUBE_API_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_OPS_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_PROXY_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_TEMPLATE_ID: 'test', CUBE_QUANTITY_TEMPLATE_ID: 'quantity-test' };
+const env = { ...process.env, ERP_AGENT_LOAD_CUBE_ENV:'0', API_INTERNAL_HOST:'', DATABASE_URL: url.href, API_PORT: String(port), DEEPSEEK_API_KEY: '', ERP_API_TOKEN:'synthetic-erp', ERP_CREDENTIAL_FORGE_READER:'forge-reader-token', ERP_CREDENTIAL_LIMITED_READER:'limited-reader-token', ERP_API_URL:`http://127.0.0.1:${cube.address().port}`, ERP_SHARED_DEMO_MODE:'true', OPENVIKING_URL:`http://127.0.0.1:${cube.address().port}`, OPENVIKING_API_KEY:'', CUBE_API_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_OPS_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_PROXY_URL: `http://127.0.0.1:${cube.address().port}`, CUBE_TEMPLATE_ID: 'test' };
 env.AGENT_MAX_CONCURRENT_RUNS = '4';
+env.CUBE_QUANTITY_TEMPLATE_ID = 'quantity-test';
 env.RUSTFS_ENDPOINT=`http://127.0.0.1:${cube.address().port}`;
 env.RUSTFS_BUCKET='fixture-originals'; env.RUSTFS_ACCESS_KEY='synthetic'; env.RUSTFS_SECRET_KEY='synthetic-test-only';
 env.AGENT_STORAGE_ORIGIN=origin;
@@ -351,6 +385,8 @@ try {
     assert.equal((await api(toolPath,{token:newClaim.storage_token,method:'POST',body:toolCall})).data.orders.length,1);
   }
   await db.query('DELETE FROM agent_runs WHERE message_id=$1',[message.message.id]);
+  await api(quantityPath, { token: newClaim.storage_token, method: 'POST', body: quantityInput, status: 403 });
+  assert.equal(creates, quantityCreates);
   await api(`/cases/${id}/conversation/messages`,{token:a,method:'POST',body:{...messageInput,settings:{approval:'ask',model:'deepseek-flash',effort:'low'}},status:409});
   await api(`/cases/${id}/conversation/messages`,{token:a,method:'POST',body:{client_message_id:randomUUID(),text:'invalid',settings:{approval:'invalid',model:'deepseek-flash',effort:'high'}},status:400});
   note('MCP scoped and standalone capabilities, active run, explicit grants, ERP customer/part fields, knowledge path isolation, reads available in all approval modes');
@@ -583,6 +619,46 @@ try {
   loseCreate = false;
   cubeTurnCompleted = false;
   await start();
+  await api('/runtime', { token: a, status: 403 });
+  await api('/runtime/candidates', { token: a, method: 'POST', body: { request_id: randomUUID(), name: 'Unauthorized', image: runtimeImage, cpu_milli: 750, memory_mib: 1024 }, status: 403 });
+  await db.query("UPDATE users SET roles=array_append(roles,'runtime_admin') WHERE id=$1", [actor.userId]);
+  const runtimeOverview = await api('/runtime', { token: a });
+  assert.equal(runtimeOverview.provider_available, true);
+  assert.equal(runtimeOverview.templates.length, 3);
+  assert.equal(JSON.stringify(runtimeOverview).includes('createRequest'), false);
+  await api('/runtime/templates/tpl-other/adopt', { token: a, method: 'POST', body: { request_id: randomUUID(), name: 'Untrusted template' }, status: 400 });
+  await api('/runtime/templates/tpl-invalid-env/adopt', { token: a, method: 'POST', body: { request_id: randomUUID(), name: 'Invalid resident env' }, status: 400 });
+  const candidateInput = { request_id: randomUUID(), name: 'Synthetic resident', image: runtimeImage, cpu_milli: 750, memory_mib: 1024 };
+  await api('/runtime/candidates', { token: a, method: 'POST', body: { ...candidateInput, image: 'docker.io/other:latest' }, status: 400 });
+  const draft = await api('/runtime/candidates', { token: a, method: 'POST', body: candidateInput, status: 201 });
+  assert.equal(draft.state, 'draft');
+  assert.equal((await api('/runtime/candidates', { token: a, method: 'POST', body: candidateInput, status: 201 })).id, draft.id);
+  await api('/runtime/candidates', { token: a, method: 'POST', body: { ...candidateInput, name: 'Changed request' }, status: 409 });
+  const built = await api(`/runtime/candidates/${draft.id}/build`, { token: a, method: 'POST', status: 202 });
+  assert.equal(built.template_id, 'tpl-built');
+  assert.equal(templateBuilds, 1);
+  await api(`/runtime/candidates/${draft.id}/build`, { token: a, method: 'POST', status: 409 });
+  assert.equal(templateBuilds, 1);
+  assert.equal((await api(`/runtime/candidates/${draft.id}`, { token: a })).state, 'ready');
+  await api(`/runtime/candidates/${draft.id}/activate`, { token: a, method: 'POST', body: { expected_version: 0 }, status: 409 });
+  const canary = await api(`/runtime/candidates/${draft.id}/canary`, { token: a, method: 'POST', status: 201 });
+  runtimeCanaryCaseId = canary.case_id;
+  assert.equal((await api(`/runtime/candidates/${draft.id}/canary`, { token: a, method: 'POST', status: 201 })).case_id, canary.case_id);
+  await api(`/cases/${canary.case_id}`, { token: b, status: 404 });
+  const canaryMessage = await api(`/cases/${canary.case_id}/conversation/messages`, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'Read this case with case_read' }, status: 201 });
+  assert.equal((await finished(canary.case_id, canaryMessage.message.id)).state, 'completed');
+  const canaryBinding = (await db.query('SELECT runtime_candidate_id,runtime_template_id,last_sandbox_id FROM case_sandboxes WHERE case_id=$1 ORDER BY created_at DESC LIMIT 1', [canary.case_id])).rows[0];
+  assert.equal(canaryBinding.runtime_candidate_id, draft.id);
+  assert.equal(canaryBinding.runtime_template_id, 'tpl-built');
+  assert.match(canaryBinding.last_sandbox_id, /^test-sandbox(?:-\d+)?$/);
+  assert.equal((await api(`/runtime/candidates/${draft.id}`, { token: a })).canary.ready, true);
+  const activated = await api(`/runtime/candidates/${draft.id}/activate`, { token: a, method: 'POST', body: { expected_version: 0 } });
+  assert.equal(activated.version, 1);
+  await api(`/runtime/candidates/${draft.id}/activate`, { token: a, method: 'POST', body: { expected_version: 0 }, status: 409 });
+  const canarySandbox = (await api(`/cases/${canary.case_id}/sandbox`, { token: a })).operation;
+  await api(`/cases/${canary.case_id}/sandbox/${canarySandbox.id}`, { token: a, method: 'DELETE' });
+  note('runtime admin authorization, bounded build, canary tool evidence, and versioned release');
+  cubeTurnCompleted = false;
   const cubeCase = await api('/cases', { token: a, method: 'POST', body: create, status: 201 });
   const beforeCubeCreates = creates;
   const cubeMessage = await api(`/cases/${cubeCase.id}/conversation/messages`, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'cube streaming' }, status: 201 });
@@ -603,12 +679,78 @@ try {
   assert.equal(creates, beforeCubeCreates + 1);
   const cubeSandbox = (await api(`/cases/${cubeCase.id}/sandbox`, { token: a })).operation;
   assert.equal(cubeSandbox.guest_ready, true);
+  assert.equal((await db.query('SELECT runtime_template_id,runtime_release_id FROM case_sandboxes WHERE id=$1', [cubeSandbox.id])).rows[0].runtime_template_id, 'tpl-built');
   assert.equal((await db.query('SELECT mcp_session_id FROM case_sandboxes WHERE id=$1', [cubeSandbox.id])).rows[0].mcp_session_id.startsWith('mcp_'), true);
-  await api(`/cases/${cubeCase.id}/sandbox/${cubeSandbox.id}`, { token: a, method: 'DELETE' });
+  const adoptedTemplate = await api('/runtime/templates/tpl-managed/adopt', { token: a, method: 'POST', body: { request_id: randomUUID(), name: 'Managed switch target' }, status: 201 });
+  const switchedRequestId = randomUUID();
+  const switched = await api(`/cases/${cubeCase.id}/sandbox/switch`, { token: a, method: 'POST', body: { request_id: switchedRequestId, template_id: 'tpl-managed' }, status: 200 });
+  assert.equal(switched.switched, true);
+  assert.equal(switched.operation.id, switchedRequestId);
+  assert.equal(switched.operation.runtime_template_id, 'tpl-managed');
+  assert.notEqual(switched.operation.sandbox_id, cubeSandbox.sandbox_id);
+  const switchBinding = (await db.query('SELECT id,session_id,active,state,runtime_template_id,session_lease_id FROM case_sandboxes WHERE case_id=$1 ORDER BY created_at', [cubeCase.id])).rows;
+  assert.equal(switchBinding.filter(row => row.active).length, 1);
+  assert.equal(switchBinding.find(row => row.active).runtime_template_id, 'tpl-managed');
+  assert.equal(switchBinding.find(row => row.id === cubeSandbox.id).state, 'released');
+  assert.equal(switchBinding.find(row => row.id === cubeSandbox.id).session_id, switchBinding.find(row => row.active).session_id);
+  const switchLease = (await db.query('SELECT revoked_at FROM agent_session_runtime_leases WHERE id=$1', [switchBinding.find(row => row.active).session_lease_id])).rows[0];
+  assert.equal(switchLease.revoked_at, null);
+  assert.equal((await db.query('SELECT token_hash FROM agent_sessions WHERE id=$1', [switchBinding.find(row => row.active).session_id])).rows[0].token_hash, null);
+  const afterSwitchMessage = await api(`/cases/${cubeCase.id}/conversation/messages`, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'cube after template switch' }, status: 201 });
+  assert.equal((await finished(cubeCase.id, afterSwitchMessage.message.id)).state, 'completed');
+  createFailure = true;
+  const failedSwitch = await api(`/cases/${cubeCase.id}/sandbox/switch`, { token: a, method: 'POST', body: { request_id: randomUUID(), template_id: 'test' }, status: 503 });
+  createFailure = false;
+  assert.equal(failedSwitch.error, 'cube_runtime_not_ready');
+  const retained = (await api(`/cases/${cubeCase.id}/sandbox`, { token: a })).operation;
+  assert.equal(retained.id, switchedRequestId);
+  assert.equal(retained.runtime_template_id, 'tpl-managed');
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM case_sandboxes WHERE case_id=$1 AND active=false AND state<>'released'", [cubeCase.id])).rows[0].n, 0);
+  assert.equal(adoptedTemplate.template_id, 'tpl-managed');
+  note('Cube template switch creates a replacement sandbox, preserves the PostgreSQL session, revokes only the old lease, and keeps the active sandbox after a failed replacement');
+  await api(`/cases/${cubeCase.id}/sandbox/${switchedRequestId}`, { token: a, method: 'DELETE' });
+  const failedCubeCase = await api('/cases', { token: a, method: 'POST', body: create, status: 201 });
+  createFailure = true;
+  const failedCubeMessage = await api(`/cases/${failedCubeCase.id}/conversation/messages`, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'cube create failure' }, status: 201 });
+  const failedCubeStarted = Date.now();
+  const failedCubeResponse = await finished(failedCubeCase.id, failedCubeMessage.message.id);
+  const failedCubeElapsed = Date.now() - failedCubeStarted;
+  createFailure = false;
+  assert.equal(failedCubeResponse.state, 'failed');
+  assert(failedCubeElapsed < 5000, `Cube create failure waited too long: ${failedCubeElapsed}ms\n${logs}`);
+  const failedCubeSandbox = (await db.query('SELECT state,sandbox_id,error_code FROM case_sandboxes WHERE case_id=$1 ORDER BY created_at DESC LIMIT 1', [failedCubeCase.id])).rows[0];
+  assert.equal(failedCubeSandbox.state, 'creating');
+  assert.equal(failedCubeSandbox.sandbox_id, null);
+  assert.equal(failedCubeSandbox.error_code, 'creation_unconfirmed');
+  await db.query("UPDATE case_sandboxes SET created_at=now()-interval '10 seconds' WHERE case_id=$1", [failedCubeCase.id]);
+  const beforeRecoveredCreate = creates;
+  const recoveredCubeMessage = await api(`/cases/${failedCubeCase.id}/conversation/messages`, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'retry cube creation' }, status: 201 });
+  const recoveredCubeResponse = await finished(failedCubeCase.id, recoveredCubeMessage.message.id);
+  assert.equal(recoveredCubeResponse.state, 'completed', logs);
+  assert.equal(recoveredCubeResponse.text, 'Streamed from Cube');
+  assert.equal(creates, beforeRecoveredCreate + 1);
+  const recoveredSandboxes = (await db.query('SELECT state,sandbox_id,error_code FROM case_sandboxes WHERE case_id=$1 ORDER BY created_at', [failedCubeCase.id])).rows;
+  assert.deepEqual(recoveredSandboxes.map(row => row.state).sort(), ['provisioned', 'released']);
+  assert.equal(recoveredSandboxes.find(row => row.state === 'released').sandbox_id, null);
+  const recoveredCubeSandbox = (await api(`/cases/${failedCubeCase.id}/sandbox`, { token: a })).operation;
+  await api(`/cases/${failedCubeCase.id}/sandbox/${recoveredCubeSandbox.id}`, { token: a, method: 'DELETE' });
+  const lateCubeCase = await api('/cases', { token: a, method: 'POST', body: create, status: 201 });
+  lateCreate = true;
+  const lateCubeMessage = await api(`/cases/${lateCubeCase.id}/conversation/messages`, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'late cube creation' }, status: 201 });
+  assert.equal((await finished(lateCubeCase.id, lateCubeMessage.message.id)).state, 'failed');
+  assert.equal((await db.query('SELECT sandbox_id FROM case_sandboxes WHERE case_id=$1', [lateCubeCase.id])).rows[0].sandbox_id, null);
+  const beforeLateRecovery = creates;
+  const lateRetryMessage = await api(`/cases/${lateCubeCase.id}/conversation/messages`, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'retry late cube creation' }, status: 201 });
+  const lateRetryResponse = await finished(lateCubeCase.id, lateRetryMessage.message.id);
+  assert.equal(lateRetryResponse.state, 'completed', logs);
+  assert.equal(creates, beforeLateRecovery + 1);
+  assert.deepEqual((await db.query('SELECT state FROM case_sandboxes WHERE case_id=$1', [lateCubeCase.id])).rows.map(row => row.state).sort(), ['provisioned', 'released']);
+  const lateRecoveredSandbox = (await api(`/cases/${lateCubeCase.id}/sandbox`, { token: a })).operation;
+  await api(`/cases/${lateCubeCase.id}/sandbox/${lateRecoveredSandbox.id}`, { token: a, method: 'DELETE' });
   await stop();
   env.AGENT_EXECUTION_BACKEND = 'local';
   await start();
-  note('Cube worker opt-in auto-provisions a case resident and saves streamed text before completion');
+  note('Cube worker provisions a resident, fails fast on unconfirmed creation, and safely recovers absent or late-created instances');
 
   await stop(); env.DEEPSEEK_API_KEY = ''; await start();
   const denied = await api(runPath, { token: a, method: 'POST', body: { client_message_id: randomUUID(), text: 'revoked' }, status: 201 });

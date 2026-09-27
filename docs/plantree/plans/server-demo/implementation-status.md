@@ -1,8 +1,24 @@
 # Implementation Status
 
-2026-09-26 Cube 多模板工具复验：`cube_quantity_summary` 通过四轮真实 JCode/Cube 对话，结果、唯一标记回忆、PostgreSQL 审计及独立工具实例删除均正确；第二轮后销毁常驻实例，后两轮从同一 PostgreSQL 会话恢复。工具耗时 447-615 ms；伪造 token 与浏览器 token 均被内部工具端点以 401 拒绝。现有常驻模板另通过四会话冷/暖两轮测试，8/8 回复正确，总响应 P95 为 3,807/1,872 ms；这不是代码工具并发测试。Web 1440/390/320 px 与刷新检查通过，Cube WebUI 和八个 Worker 运行中；557 次资源采样无抓取错误，但 guest 指标仍缺失，工具时间线尚缺安全参数/结果摘要及耗时。报告根目录 `/tmp/erp-cube-quantity-acceptance-20260926/`；模板候选只用于 canary，默认 release 未切换。先前 `npm run check`、Bridge 单测及故障 fixture 通过，本轮仅修改验收脚本和文档。代码工具并发、浏览器/解析模板、历史监控/告警与跨节点回收仍未验收。命令、证据及限制见[模板接入计划](runtime-management.md#2026-09-26-follow-up-acceptance)。
+2026-09-27 当前 Cube 主机部署与长期监控：`erp-agent-api.service`、8 个 `erp-agent-worker@.service`、30 秒健康快照 timer 和本地告警 sink 已切换为持久用户级 systemd 服务，`loginctl Linger=yes`。Prometheus 2.54.1、Alertmanager 0.27.0、Blackbox/Node/PostgreSQL exporters 和 Grafana 11.2.0 通过 Compose 启动，全部端点 loopback-only；Prometheus 11/11 targets 为 `up`（含 Cubelet 原生 `/v1/metrics/resource`），14 条规则通过 `promtool`，Alertmanager synthetic canary 按 30 秒聚合延迟写入脱敏 JSONL，API 重启后 ready、metrics 和 8 个 worker 均恢复。完整证据、端点和限制见[监控部署记录](monitoring-deployment.md)。这证明当前 Cube 主机持久运行和告警投递，不代表公网生产、高可用、远端通知、备份恢复、guest 工作负载指标或长期业务负载验收。
+
+2026-09-26 Cube/Forge 模板切换接线：新增 `POST /v1/cases/{case_id}/sandbox/switch`，由 Cube 继续负责模板与 Sandbox 生命周期，Forge 负责已采纳模板校验、同一 PostgreSQL 会话的第二运行租约、resident Bridge/JCode 配置、原子提升和旧实例释放。切换期间消息入队与 Worker provisioning 会拒绝；替换失败会清理非活动实例并保留旧活动实例。PostgreSQL 新增 `agent_session_runtime_leases`，`case_sandboxes` 增加 `active/session_lease_id`，并保留旧绑定的模板、实例和审计记录。系统 fixture 已通过成功切换、会话保持、旧租约撤销、切换后消息和失败回滚；这不是 Cube 原地换模板，也不是生产部署验收。详情见[模板接入计划](runtime-management.md#2026-09-26-forge-aware-template-switch)。
+
+2026-09-26 Cube 浏览器模板：`cube_browser_browse` 已在真实常驻 JCode 回合中使用独立 Chromium 模板读取 `https://example.com`，标题/正文标识正确，结果和一次审计已落 PostgreSQL，工具实例删除已核实；工具 4,191 ms、总回合 6,642 ms。`npm run check` 通过。仅一个受限域名样本，不代表通用浏览器、并发或故障恢复验收。原生 Cube Web 的新建沙箱模板选择也已实际核对；现有实例没有原地换模板入口，原生页面本身不会自动建立 Forge/JCode 会话绑定，现由 Rust API 的受控切换路由补齐这条业务边界。之前的管理页实验已把本地 release 切为 version 2 / `tpl-e30d9fe2d99f47cf963459db`，不能继续沿用下文历史记录中“默认未切换”的状态。实验页面仍非接受方向。命令、失败链路、报告及限制见[浏览器验收记录](runtime-management.md#2026-09-26-browser-template-acceptance)。
+
+2026-09-26 Cube 多模板工具复验：`cube_quantity_summary` 通过四轮真实 JCode/Cube 对话，结果、唯一标记回忆、PostgreSQL 审计及独立工具实例删除均正确；第二轮后销毁常驻实例，后两轮从同一 PostgreSQL 会话恢复。工具耗时 447-615 ms；伪造 token 与浏览器 token 均被内部工具端点以 401 拒绝。现有常驻模板另通过四会话冷/暖两轮测试，8/8 回复正确，总响应 P95 为 3,807/1,872 ms；这不是代码工具并发测试。Web 1440/390/320 px 与刷新检查通过，Cube WebUI 和八个 Worker 运行中；557 次资源采样无抓取错误，但 guest 指标仍缺失，工具时间线尚缺安全参数/结果摘要及耗时。报告根目录 `/tmp/erp-cube-quantity-acceptance-20260926/`；模板候选只用于 canary，默认 release 未切换。先前 `npm run check`、Bridge 单测及故障 fixture 通过，本轮仅修改验收脚本和文档。代码工具并发、浏览器/解析模板、历史监控/告警与跨节点回收仍未验收；当前主机监控已在 2026-09-27 独立部署并记录，长期业务负载与跨节点回收仍未验收。命令、证据及限制见[模板接入计划](runtime-management.md#2026-09-26-follow-up-acceptance)。
+
+2026-09-26 Cube 官方接入建议核对：已读取官网模板、LangChain 工具接入、自定义镜像及 Pi 常驻预热文档，依据与项目选择记录在[模板接入计划](runtime-management.md#official-guidance-review)。官方示例支持 Harness 常驻模板或工具调用另一模板实例；envd 适用于 SDK 命令/文件接口，自有 HTTP 服务可以使用应用协议。代码核对确认当前 Bridge 在首轮才构建 JCode，模板 READY 不能作为完整 Agent 会话预热的证据。此轮仅补充计划与差距记录，额外模板仍未接通，未修改运行代码或重启服务。
+
+2026-09-26 当前设计重点：用户明确希望 JCode 能复用 Cube 的其他模板环境。按[模板接入计划](runtime-management.md)区分“JCode 所在的兼容模板”和“受控工具调用的其他模板实例”；后者无需每个都内置 JCode。已核对 Cube 官方源码中的代码、浏览器及基础模板目录，但额外模板的工具适配尚未实现。当前处于 Shape plan，下一步固定一个有界操作及其权限、协议、生命周期与验收契约；保留尚未提交的管理页实验，不继续扩展其功能。本次澄清仅修改计划，未重启服务或改变运行中的模板选择。
 
 2026-09-26 受控环境读取：按用户要求保持本地临时探针开启，默认配置仍关闭。真实 Cube 冷回合完成五条固定只读命令，PostgreSQL 工具原始结果确认 `/home/forge/work`、`forge` UID 10001 和 Ubuntu 24.04.5；暖回合只转述已有结果，不能算第二次执行。Web 以“读取运行环境”展示五条完成记录，刷新和 1440/390/320 px 检查通过。命令、会话标识、开关生效时机和证据见[常驻运行时记录](cube-resident-runtime.md)。
+
+2026-09-26 当前模板 50 会话复测：在 `tpl-02d04202aa634f329df8d19f` 上用八个 Worker 运行合成短提示，冷/暖两轮各 50/50 完成，100 次均走 Cube、无工具调用，目标模板和独立 session/实例已核对。冷/暖总耗时 P95 为 4,524/2,100 ms；50 个测试实例均释放。逐条核对保存回复后，算术正确率为冷轮 46/50、暖轮 47/50；7 条错误回复不能被完成率掩盖，且没有宿主机同条件对照，尚不能归因于 Cube。500 ms 资源采样的峰值 PostgreSQL 连接数为 120、`host_sandbox` 序列为 51（含已有实例），未见内存限额失败；Cube guest 工作集指标仍未启用。命令、原始报告、限制见[常驻运行时记录](cube-resident-runtime.md)。
+
+2026-09-26 本地常驻模型切换与 Web 复测：同一 Cube/JCode 会话第一轮选择 `deepseek-v4-pro` / `none`，第二轮选择 `deepseek-flash` / `max` 时，先前实现只更新思考程度，PostgreSQL `agent_sessions.metadata.model` 仍为 Pro。Worker 现在把每轮模型写入受控 Bridge 请求，Bridge 校验模型并在常驻 JCode 上切换 provider；新镜像 `127.0.0.1:5000/forge-agent-runtime:model-turn-20260926` 导入 Cube 模板 `tpl-02d04202aa634f329df8d19f`，应用探针 READY，规格 750m CPU / 1024 MiB。重启本地 API 和八个 Worker 后，`/ready` 为 200，真实浏览器脚本 `PLAYWRIGHT_MODULE=/tmp/erp-agent-flow-check/node_modules/playwright/index.mjs VERIFY_CONTROLS_OUTPUT=/tmp/erp-agent-controls-20260926 node --env-file=.env scripts/verify-web-agent-controls.mjs` 通过四组检查：真实 ERP 订单列表/明细与未配置 OpenViking 的失败事件、1440/390/320 宽度的输入框和模式菜单、Pro/关闭思考/完全访问设置持久化，以及同会话 Flash/最高切换与停止恢复。第二轮 JCode PostgreSQL 会话元数据实测为 `deepseek-flash` / `max`，20 张截图和报告见 `/tmp/erp-agent-controls-20260926/`，浏览器 page error 为零。Bridge 6 项单测、完整 `npm run check` 与 `git diff --check` 通过。本次只验证本地单会话模型切换；不代表 50 用户真实混合负载、OpenViking 检索、ERP 写入、解析入库或生产部署验收。
+
+2026-09-25 Cube 身份与工具边界：旧模板实际运行 UID 0，不能只凭 OCI `USER forge` 判断隔离；入口脚本使用 `setpriv` 降到 UID/GID 10001 后，新模板真实冷/暖五条固定只读命令的 PostgreSQL 工具结果均为 `forge`。关闭临时 Bash 开关并重启本地服务后，冷/暖复测均为零工具调用。原始报告分别在 `/tmp/erp-cube-acceptance/nonroot-probe-live-20260925/report.json` 和 `/tmp/erp-cube-acceptance/bash-disabled-live-20260925/report.json`；细节见 [常驻运行时记录](cube-resident-runtime.md)。这不是通用 Bash 或 ERP 写权限的开放。
 
 2026-09-24 RAG embedding 基础：新增独立 `services/ingestion-worker` 的 TEI HTTP 客户端和 `embedding-worker` 二进制。PostgreSQL 新增 `knowledge_chunks`、带租约/fencing token/退避的 `knowledge_embedding_jobs`，以及 pgvector `knowledge_chunk_embeddings`；worker 校验文本 SHA-256、模型登记维度并幂等 upsert，绝不消费个人 `memory_outbox`。迁移已在当前 pgvector 本地数据库执行，ingestion-worker 的 9 个单元测试与 5 个 fixture 测试通过。尚未接入真实 TEI、MinerU 产物入队或 OpenViking 发布，因此不把此项称为端到端 RAG 验收。
 
@@ -40,18 +56,18 @@
 
 2026-09-22 最新补充：[MCP/输入框联调](mcp-composer-integration.md)已完成 ERPNext 实际只读查询、两个 MCP 服务注册、模型/思考程度与停止的真实检查。OpenViking 工具已注册，服务及 Embedding 待配置。批准三模式和流式中断修复已实现，实测证据及限制见[最新验收](stream-recovery-fix.md)。
 
-- Current Phase: Rust API cutover verified；个人认证、RustFS 原件、用户隔离、真实上下文压缩与恢复已落地，继续接真实解析和知识服务。
+- Current Phase: Rust API、个人认证、RustFS 原件、用户隔离、真实上下文压缩与 PostgreSQL 恢复已完成本地验证；当前主机 API/worker/Cube 探针及 Prometheus 告警链路已持久部署，Cube 常驻 JCode 继续接真实解析和知识服务。
 - Last Landed: 2026-09-22 Rust/Axum API、Argon2id 邮箱注册、RustFS 私有对象、压缩组件及迁移校验；并发 worker、失败恢复、Skill 版本归档和 DeepSeek Responses Loop 已通过。流式正文在显示前写入 PostgreSQL 检查点，断流、主动停止、Runtime 强杀、API 重启和超过 150 秒的受控回合已验证；默认不再设置 150 秒总时限。
 - Next Target: 按 [解析设计](parser-pipeline-design.md)，基于已接通的 RustFS 上传实现持久文档任务、MinerU/视觉适配和统一产物，再接 OpenViking 与 Rust MCP 网关。
-- Last Verified: `npm run check` 通过 Web 类型检查、Rust 构建、PostgreSQL 隔离集成测试和 Web 构建；新案件真实手动压缩从 17,491 降至 3,292 estimated tokens，61 条原始消息保留并在 API 重启后恢复事实，RustFS 原件哈希/越权拒绝/重启持久化通过。1440/390/320 登录、注册、记忆、压缩组件截图和新账号隔离检查通过；证据见 [Rust 验收](rust-auth-context.md)。Bridge compaction regression、解析 fixture 与既有 Skill/Cube/业务证据见各联调记录。
+- Last Verified: `npm run check` 通过 Web 类型检查、Rust 构建、PostgreSQL 隔离集成测试和 Web 构建；2026-09-27 当前 Cube 主机监控 11/11 targets 为 `up`、14 条规则通过校验、Alertmanager canary 已落盘，Cube systemd 状态进入 Prometheus，API 重启恢复和 Linger 已核实。新案件真实手动压缩从 17,491 降至 3,292 estimated tokens，61 条原始消息保留并在 API 重启后恢复事实，RustFS 原件哈希/越权拒绝/重启持久化通过。1440/390/320 登录、注册、记忆、压缩组件截图和新账号隔离检查通过；证据见 [Rust 验收](rust-auth-context.md) 与[监控部署记录](monitoring-deployment.md)。Bridge compaction regression、解析 fixture 与既有 Skill/Cube/业务证据见各联调记录。
 - Context policy: 会话预算使用当前模型的上下文窗口，不再由 Forge 固定到 200k。DeepSeek API-key `/models` 不提供窗口值；当前支持的 `deepseek-flash` 和 `deepseek-v4-pro` 依据官方资料映射为 1,048,576 tokens，目录中若提供窗口值则优先。`AGENT_COMPACTION_SOFT_RATIO` / `AGENT_COMPACTION_CRITICAL_RATIO` 默认 0.80 / 0.90，按预算比例触发后台/紧急压缩。运行桥启动时会拒绝与模型窗口不一致的预算。压缩只改变发给模型的活动上下文，PostgreSQL 继续保留原消息和检查点。80%/90% 阈值单元测试、运行桥构建、API 49 项测试、MCP 构建和前端类型检查已通过；自动压缩的真实链路已用 2% 软阈值完成触发、事件、持久化、重启恢复验收，80% 实际长上下文负载仍未消耗约 80 万 tokens 做压力验证。
-- Blocked By: 模型配置已具备。尚未验证 ERP/知识服务、双案件模型运行、混合负载或 Cube 内常驻 Harness。
+- Blocked By: 模型配置已具备。Cube 内常驻 Harness 和双案件隔离已通过本地探针；真实 OpenViking/TEI/MinerU 链路、正式凭据、ERP 受控写入、长时间混合负载及公网生产/高可用部署仍未验收。当前主机的 loopback-only 持久监控不等于生产级告警。
 
 ## Active TODO
 
 1. 按 [解析设计](parser-pipeline-design.md)固定 MinerU/视觉模型接口，实现真实 ParseBackend 和带原文位置的统一产物，以双类合成图片对比解析效果。
 2. 让解析 Worker 从 RustFS 原件生成 `knowledge_chunks` 并入队，接入真实 TEI 后再接 OpenViking 发布及 Rust MCP 网关；验证引用、隔离、失败恢复，并启用相应业务 Skill。
-3. 按[存储设计](../../../architecture/session-storage.md)验证 Cube 重建恢复，再验证常驻 JCode/Bridge 的双案件隔离、暂停恢复与预热，对照外部 Harness。
+3. 按[常驻运行时记录](cube-resident-runtime.md)补齐 guest 工作集和长时间混合负载测量，对照外部 Harness；重建恢复、双案件隔离和暂停恢复已有本地证据。持续观察当前监控栈并补齐外部通知、备份和故障演练。
 4. 接入 ERPNext，补齐批准后 ERP 状态重验、受控执行及对账；与知识依据合并验收。
 
 API 的登录 `sessions`、Agent 存储 `agent_sessions`、案件输入 `case_conversation_messages` 是不同记录。配置模型后，新消息事务性排入 `agent_runs`，JCode 执行模型/工具循环；无配置时只保存输入，后续配置不会补跑旧消息。审批不执行 ERP 写入。

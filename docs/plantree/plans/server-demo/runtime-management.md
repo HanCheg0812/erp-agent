@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 Role: scope correction and template interoperability plan
-Status: Bounded code-template tool passed local multi-turn, recreation and Web checks; management UI experiment is not the accepted direction
+Status: Bounded code-template tool passed local multi-turn, recreation and Web checks; browser-template tool passed one real JCode turn; management UI experiment is not the accepted direction
 
 ## User clarification
 
@@ -17,7 +17,7 @@ The inspected upstream checkout is TencentCloud/CubeSandbox commit `f1aaa737fb38
 | Template role | JCode integration | Current evidence |
 | --- | --- | --- |
 | Forge resident application | JCode and Bridge run inside the template instance; Forge binds and configures a business session | Existing resident implementation and local records; previous experiment report has cleanup limitations below |
-| Code or browser environment | A controlled tool adapter invokes that environment's supported interface; it need not contain JCode | Code-template `cube_quantity_summary` passed four real JCode/Cube turns, instance recreation and Web persistence checks; browser template remains unintegrated |
+| Code or browser environment | A controlled tool adapter invokes that environment's supported interface; it need not contain JCode | Code-template `cube_quantity_summary` passed four real JCode/Cube turns, instance recreation and Web persistence checks; browser-template `cube_browser_browse` passed one real turn, PostgreSQL persistence and cleanup below |
 | Custom document/utility service | A backend adapter passes scoped inputs to the service, persists outputs outside the sandbox and returns references | Design only; no parser/ingestion acceptance implied |
 | Another Agent application | Requires its own service contract or a derived image with our Harness; its tools and permissions are not automatically inherited | Not integrated |
 
@@ -33,6 +33,8 @@ The adapter mapping must identify the workload, pinned template, readiness contr
 - [LangChain integration](https://cubesandbox.com/zh/guide/integrations/langchain): the example binds a tool to a sandbox created from a selected template and replaces local execution with SDK operations. It reuses that sandbox across the Agent loop, preinstalls dependencies and separates sandbox lifetime from command timeout. This supports reusing a tool environment without installing JCode in it. Its generic Python execution permission is not our business Agent policy. The guide also notes that context-manager cleanup can swallow kill errors; Forge must observe cleanup failures and reconcile them.
 - [Custom template images](https://cubesandbox.com/zh/guide/tutorials/bring-your-own-image): retain envd for SDK command/file/terminal operations. A template providing only its own HTTP service can omit envd and probe the application instead. Compatibility is therefore the supported interface and workload dependencies, not merely a template ID. Installing envd does not grant the model permission to use its APIs.
 - [Prewarmed template services](https://cubesandbox.com/zh/guide/tutorials/prewarm-template-service): the Pi example keeps an initialized AgentSession resident and snapshots it only after its application readiness probe succeeds. Reusable snapshots must exclude credentials and user data; restored external connections need validation or reconstruction, and concurrency must be explicit.
+
+The official examples need one qualification: the LangChain page shows a short-lived host-side Agent loop that creates one tool sandbox, reuses it during that loop, and kills it at the end; the lifecycle guidance separately supports pausing and resuming the same sandbox. Neither page describes changing the template of an existing running sandbox. Our JCode mapping therefore keeps a PostgreSQL-backed session on one resident compatible sandbox, and performs a template change by creating a new compatible sandbox, revalidating its contract, then restoring durable session state. This is an application design using Cube's documented lifecycle primitives, not a claim that Cube provides an in-place template switch.
 
 Our recommendation, based on those patterns, is to keep the current resident JCode template and add capability-specific adapters for other Cube template instances. A compatible derived image remains an option when JCode needs that environment directly. One controlled backend adapter may support multiple templates implementing the same verified interface; template-specific software does not require a separate Harness implementation. Cube WebUI owns template/instance operations, while backend configuration binds an approved capability to a pinned template and protocol. A running JCode process does not inherit another instance's packages, workspace or memory merely because both use Cube.
 
@@ -53,7 +55,7 @@ Current readiness gap: `services/runtime-bridge/src/resident.rs` starts with `ru
 1. Consolidate the existing resident template definition and native Cube creation/inspection path. Retain useful instance identity checks; separate the unaccepted administration experiment without losing its changes or evidence.
 2. Completed for the code-template pilot: bounded operation, protocol, backend adapter, permissions, lifecycle, timeout and result contract. Other template protocols need separate adapters.
 3. Completed for the pilot through the controlled tool registry; the tool environment and Agent session use distinct Cube instances. No arbitrary shell or implicit session adoption was added.
-4. Completed for four synthetic JCode turns, resident recreation, PostgreSQL result/audit checks and desktop/mobile Web persistence. Four concurrent resident sessions also passed on the existing active template; this did not exercise concurrent code-template tools. Multi-template concurrent load, cross-node cleanup and application-session prewarm remain unverified. The business tool timeline still needs safe parameter/result summaries and duration; guest workload metrics and historical monitoring/alerts remain separate work.
+4. Completed for four synthetic JCode turns, resident recreation, PostgreSQL result/audit checks and desktop/mobile Web persistence. Four concurrent resident sessions also passed on the existing active template; this did not exercise concurrent code-template tools. Multi-template concurrent load, cross-node cleanup and application-session prewarm remain unverified. The business tool timeline still needs safe parameter/result summaries and duration; Cube guest workload metrics and mixed-load alert acceptance remain separate work. The current-host Cube deployment now has a persistent Prometheus/Alertmanager/Grafana baseline; its evidence is recorded in [monitoring-deployment.md](monitoring-deployment.md).
 
 ## 2026-09-26 pilot evidence and limits
 
@@ -108,7 +110,44 @@ Earlier attempts exposed verifier assumptions rather than new runtime defects: a
 
 `node --check` passed for both changed scripts and `git diff --check` passed. The preceding pilot's full `npm run check` remains the build/system evidence; it was not rerun for these script/document-only edits. Raw reports and screenshots are under `/tmp` and may be removed by local cleanup; this durable summary records the measured results and limits.
 
-Remaining gates: concurrent code-template tools and mixed load, browser/parser adapters, immutable code-image digest capture, safe tool input/result/duration display, guest metrics and historical alerts, full application-session prewarm, cross-node recovery, ERP writes and production deployment. Local template interoperability is demonstrated for this one bounded capability; arbitrary Cube templates are not automatically JCode tools.
+Remaining gates: concurrent code-template tools and mixed load, browser/parser adapters, immutable code-image digest capture, safe tool input/result/duration display, guest workload metrics and business-load alert thresholds, full application-session prewarm, cross-node recovery, ERP writes and production deployment. The current-host Cube monitoring baseline is deployed and verified, but it does not establish multi-node capacity, external notification, or production business-load acceptance. Local template interoperability is demonstrated for this one bounded capability; arbitrary Cube templates are not automatically JCode tools.
+
+## 2026-09-26 browser template acceptance
+
+The controlled `cube_browser_browse` adapter uses the official browser template `tpl-5f913dc0f4b3471c92d2fb18` through its Chromium CDP endpoint. The model supplies an HTTPS URL and tool-call ID; backend configuration fixes the template and allowed hosts. The pilot allows only `example.com`, disables general Internet access and requests that host in Cube's `network.allow_out`. It validates the current JCode session/run and persists operation, result, audit and cleanup state in PostgreSQL. This does not expose shell, arbitrary scripts or a general browser controller to the model.
+
+Reproducible command, using ignored local credential files:
+
+```sh
+CUBE_API_URL=http://127.0.0.1:3001 VERIFY_API_ORIGIN=http://127.0.0.1:3100 \
+node --env-file=.env --env-file=.runtime/cube.env scripts/verify-cube-browser-live.mjs
+```
+
+Report `/tmp/erp-cube-browser/1790426894399/report.json` passed at 2026-09-26 20:48 CST. Case `8b875476-eb13-4175-ac6e-6afefc235c63`, message 2246, completed one `cube_browser_browse` call and replied `TITLE=Example Domain` / `HEAD=Example Domain`. Operation `ba71d1c7-9942-426a-b9a9-87e2abd91dfc` persisted the expected title, heading, excerpt and template/instance identity. Browser instance `6cc69f3a87ce47318bd7d9990ebeaa49` was absent from Cube after cleanup; one completion audit was recorded. Forged and browser-login tokens both received 401 without additional operations. Saved timing identified backend `cube`: tool 4,191 ms, complete run 6,642 ms and resident readiness 718 ms. This is one sample, not a percentile or capacity measurement.
+
+Earlier attempts separated three faults: CDP startup briefly returned gateway/connection errors after restore; `Runtime.evaluate` was incorrectly unwrapped twice; a Chromium `ERR_NETWORK_CHANGED` page was initially treated as successful content. The adapter now retries startup briefly, reads the correct value, retries bounded navigations and requires a successful navigation with an HTTPS same-host final URL. The failed-content report `/tmp/erp-cube-browser/1790426633381/report.json` remains evidence of that failure, not a successful browse. UTF-8 excerpt truncation also reserves the ellipsis before choosing a character boundary, with a focused multibyte regression.
+
+`npm run check` passed after the CDP/navigation changes: Web typecheck/build, 65 API unit tests, three HTTP tests, API/MCP builds and the PostgreSQL system suite. That suite's quantity-template fault injections do not establish browser-adapter failure coverage. After the UTF-8-only change, `cargo test --locked --manifest-path services/api/Cargo.toml browser_` passed both browser unit tests, `rustfmt --check --edition 2024 services/api/src/sandboxes/browser_tool.rs` and `git diff --check` passed. The complete API `cargo fmt --check` still reports formatting differences in the existing management experiment (`lib.rs`, lifecycle, provider and management modules); unrelated work was preserved, so the whole-tree formatting gate is not clean. Browser redirects, DNS/egress isolation, cancellation/restart/replay, concurrent browser tools and the business UI trace still require dedicated acceptance. No real customer pages were read.
+
+Local runtime state changed during the earlier management experiment: report `/tmp/erp-runtime-management/1790423360649/report.json` passed and activated release `26184f27-72ef-4c2d-8065-88477a6825bd`, version 2, template `tpl-e30d9fe2d99f47cf963459db`. Its resident image is `127.0.0.1:5000/forge-agent-runtime@sha256:056b864f2e2f89d8219de9b4037d397bfb3974a1d992618dbb35591529ce88c0`. The API was rebuilt/restarted for browser fixes. This supersedes the historical version-1 state above; it is local experiment evidence and does not make that Forge management page the accepted direction. No upstream PR or remote push was performed in this browser follow-up.
+
+Final local service check: the API and eight Worker user units were active, Forge `/ready` returned `ready`, and Cube Web `/health` returned `ok` with zero sandboxes. This historical point-in-time check did not establish monitoring history or alerts; the later current-host monitoring evidence is recorded in [monitoring-deployment.md](monitoring-deployment.md).
+
+## Native Cube Web template selection
+
+2026-09-26: The deployed Cube v0.7.2 Web page `/sandboxes/new` was inspected in a real browser with mock mode off. READY templates were selectable; choosing browser template `tpl-5f913dc0f4b3471c92d2fb18` highlighted it and enabled Create. A screenshot was returned to the user. No instance was created through that page during this read-only inspection.
+
+The matching official `web/src/pages/SandboxNew.tsx` sends the selected `templateID` to `sandboxApi.create`. `SandboxDetail.tsx` and `web/src/api/client.ts` provide lifecycle actions, but no in-place template replacement for an existing generic sandbox. Native AgentHub also accepts a template at creation, but its current create path is for OpenClaw; it does not configure Forge/JCode automatically.
+
+Therefore Cube Web already owns template selection for new instances. The native page does not itself establish Forge's tenant/session identity, Bridge configuration or tool mapping; the Rust API narrow binding flow below now supplies that controlled integration boundary. Tool-template selection instead changes the approved backend capability mapping. These are integration steps, not reasons to rebuild the template manager in Forge. Existing instances keep their current template; moving a conversation to another compatible environment requires a new instance and durable session recovery.
+
+## 2026-09-26 Forge-aware template switch
+
+The first narrow binding flow is now implemented in the Rust API as `POST /v1/cases/{case_id}/sandbox/switch`. Cube remains responsible for template readiness and Sandbox lifecycle. Forge accepts only a template adopted into the local runtime catalog (or the explicitly configured legacy template), checks the existing resident instance and Agent run state, creates a replacement Sandbox with the selected `templateID`, and configures the resident Bridge/JCode against a second runtime lease for the same PostgreSQL session. The replacement remains inactive until Cube reports a provisioned, guest-ready instance. A transaction then promotes the replacement, marks the old binding releasing, revokes the old base/runtime lease, and reconciles the old Cube instance. Message enqueue and Worker provisioning refuse while an inactive replacement exists.
+
+This is orchestration over Cube's documented create, health, configure and delete primitives; it is not an in-place Cube template mutation. The business user sees one switch operation and keeps the same durable conversation/session. A failed replacement is cleaned up and leaves the previously active Sandbox and session lease in place. Cube Web remains the place to build, inspect and monitor templates and generic instances; this API is the controlled Forge/JCode binding boundary, not a second template manager.
+
+The PostgreSQL migration `20260926140000_cube_template_switch` adds additive runtime leases, an `active` Sandbox binding flag and the session-lease reference. The system fixture now verifies successful switching, session continuity, old-lease revocation, post-switch messaging and failed replacement rollback. `npm run build && node --env-file=.env tests/system/test-rust-api.mjs` passed on 2026-09-26 with the Cube fixture. Real Cube Web selection and real resident template acceptance remain separate evidence; this fixture does not claim production deployment or native hot swap.
 
 ## Previous experiment
 
@@ -139,4 +178,4 @@ The configured `CUBE_TEMPLATE_ID` remains the explicit legacy fallback until a r
 
 ### Deferred
 
-Prometheus historical retention/alerts, multi-node capacity routing, arbitrary image registries, configurable commands and egress, guest workload metrics, real new-image build acceptance, rolling migration of existing instances, and production deployment remain separate gates. Do not call the current single-node sample long-term monitoring.
+Cube deployment Prometheus retention and Alertmanager delivery are now independently deployed and verified in [monitoring-deployment.md](monitoring-deployment.md). Multi-node capacity routing, arbitrary image registries, configurable commands and egress, guest workload metrics, real new-image build acceptance, rolling migration of existing instances, external notification, and production deployment remain separate gates. Do not infer long-term business-load acceptance from the current single-host monitoring baseline.

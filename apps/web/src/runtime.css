@@ -1,0 +1,95 @@
+.runtime-page { grid-row: 1 / -1; min-width: 0; min-height: 0; overflow-y: auto; background: #fff; color: #292929; }
+.runtime-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 84px; padding: 15px 32px; border-bottom: 1px solid #e6e6e6; }
+.runtime-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.runtime-heading h1 { margin-top: 3px; font-size: 18px; font-weight: 600; }
+.runtime-kicker { color: #727272; font-size: 10px; }
+.runtime-mobile-menu { display: none; }
+.runtime-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #e6e6e6; }
+.runtime-summary > div { display: flex; flex-direction: column; min-width: 0; gap: 7px; min-height: 106px; padding: 20px 30px; border-right: 1px solid #ededed; }
+.runtime-summary > div:last-child { border-right: 0; }
+.runtime-summary span, .runtime-summary small { color: #777; font-size: 11px; }
+.runtime-summary strong { font: 18px var(--mono); overflow-wrap: anywhere; }
+.runtime-tabs { display: flex; align-items: center; gap: 24px; overflow-x: auto; padding: 0 32px; border-bottom: 1px solid #e6e6e6; }
+.runtime-tabs button { display: flex; align-items: center; flex-shrink: 0; gap: 7px; min-height: 49px; padding: 0 2px; color: #696969; background: transparent; border: 0; border-bottom: 2px solid transparent; font-size: 12px; }
+.runtime-tabs button.active { color: #222; border-bottom-color: #333; font-weight: 600; }
+.runtime-body { padding: 24px 32px 50px; }
+.runtime-section-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.runtime-section-title:not(:first-child) { margin-top: 32px; padding-top: 26px; border-top: 1px solid #e6e6e6; }
+.runtime-section-title h2 { font-size: 14px; font-weight: 600; }
+.runtime-section-title span { display: block; margin-top: 5px; color: #777; font-size: 11px; }
+.runtime-form { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr) 110px 125px auto; align-items: end; gap: 10px; padding: 15px 0 23px; border-bottom: 1px solid #e6e6e6; margin-bottom: 22px; }
+.runtime-form label { display: grid; min-width: 0; gap: 6px; color: #676767; font-size: 11px; }
+.runtime-form input { width: 100%; min-width: 0; height: 35px; padding: 7px 9px; border: 1px solid #d9d9d9; border-radius: 4px; color: #252525; background: #fff; font-size: 12px; }
+.runtime-form .button { min-height: 35px; }
+.runtime-candidates { display: grid; grid-template-columns: minmax(215px, .7fr) minmax(0, 1.7fr); gap: 20px; min-height: 250px; }
+.runtime-candidate-list { min-width: 0; border-right: 1px solid #e6e6e6; padding-right: 14px; }
+.runtime-candidate { display: flex; justify-content: space-between; align-items: center; gap: 9px; width: 100%; padding: 12px 10px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #333; text-align: left; }
+.runtime-candidate:hover, .runtime-candidate.active { border-color: #e5e5e5; background: #f4f4f4; }
+.runtime-candidate span { min-width: 0; }
+.runtime-candidate strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.runtime-candidate small { display: block; margin-top: 5px; color: #777; font-size: 10px; text-transform: capitalize; }
+.runtime-candidate code { color: #777; font-size: 10px; white-space: nowrap; }
+.runtime-inspector { min-width: 0; padding: 4px 0; }
+.runtime-inspector-head { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.runtime-inspector-head h3 { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.runtime-inspector-head span:not(.runtime-state) { display: block; margin-top: 5px; color: #777; font-size: 11px; }
+.runtime-state { display: inline-flex; align-items: center; max-width: 100%; padding: 4px 7px; border: 1px solid #d9d9d9; border-radius: 4px; background: #f6f6f6; color: #555; font-size: 10px; white-space: nowrap; text-transform: capitalize; }
+.runtime-state.ready, .runtime-state.active { border-color: #c9ded0; background: #eff6f0; color: #29623b; }
+.runtime-state.failed, .runtime-state.unconfirmed { border-color: #e2cbca; background: #fcf3f2; color: #9a4943; }
+.runtime-state.building, .runtime-state.requested { border-color: #e1d8be; background: #faf6e8; color: #715a20; }
+.runtime-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px 22px; margin: 23px 0; }
+.runtime-facts dt { margin-bottom: 5px; color: #777; font-size: 10px; }
+.runtime-facts dd { margin: 0; color: #353535; font: 11px var(--mono); overflow-wrap: anywhere; }
+.runtime-request { border-block: 1px solid #e9e9e9; padding: 11px 0; font-size: 11px; }
+.runtime-request summary { color: #555; cursor: pointer; }
+.runtime-request pre { max-height: 240px; overflow: auto; padding: 12px; background: #f7f7f7; color: #444; font: 10px/1.6 var(--mono); }
+.runtime-gate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding-top: 18px; }
+.runtime-gate > span { display: inline-flex; align-items: center; gap: 5px; color: #886733; font-size: 11px; }
+.runtime-gate > span.passed { color: #29623b; }
+.runtime-gate small { color: #777; font-size: 11px; overflow-wrap: anywhere; }
+.runtime-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 19px; }
+.runtime-table-wrap { width: 100%; overflow-x: auto; }
+.runtime-table { width: 100%; min-width: 650px; border-collapse: collapse; text-align: left; font-size: 11px; }
+.runtime-table th { padding: 10px 12px; border-bottom: 1px solid #dcdcdc; color: #777; font-weight: 500; white-space: nowrap; }
+.runtime-table td { padding: 13px 12px; border-bottom: 1px solid #ededed; color: #444; vertical-align: middle; overflow-wrap: anywhere; }
+.runtime-table td strong { display: block; font-weight: 550; }
+.runtime-table td small { display: block; margin-top: 5px; color: #777; font: 10px var(--mono); }
+.runtime-table td:last-child { text-align: right; }
+.runtime-warning, .runtime-empty { color: #777; font-size: 12px; line-height: 1.6; padding: 12px 0; }
+.runtime-warning { color: #8b5934; }
+.runtime-alert, .runtime-notice { display: flex; align-items: center; gap: 9px; margin: 16px 32px 0; padding: 11px 12px; border: 1px solid #e2cbca; background: #fcf3f2; color: #8d403c; font-size: 12px; }
+.runtime-alert span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.runtime-notice { border-color: #c9ded0; background: #eff6f0; color: #29623b; }
+@media (max-width: 1160px) {
+  .runtime-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .runtime-form .button { justify-self: start; }
+  .runtime-summary > div { padding-inline: 18px; }
+}
+@media (max-width: 767px) {
+  .runtime-mobile-menu { display: inline-grid; }
+  .runtime-header { min-height: 72px; padding: 10px 16px; }
+  .runtime-header > .button { padding: 8px; font-size: 0; min-width: 36px; }
+  .runtime-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .runtime-summary > div { min-height: 94px; padding: 16px; border-bottom: 1px solid #ededed; }
+  .runtime-summary strong { font-size: 15px; }
+  .runtime-tabs { gap: 19px; padding-inline: 16px; }
+  .runtime-body { padding: 20px 16px 40px; }
+  .runtime-candidates { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .runtime-candidate-list { display: flex; gap: 5px; overflow-x: auto; padding: 0 0 10px; border-right: 0; border-bottom: 1px solid #e6e6e6; }
+  .runtime-candidate { flex: 0 0 220px; flex-direction: column; align-items: flex-start; max-width: 220px; }
+  .runtime-facts { gap: 14px; }
+  .runtime-alert, .runtime-notice { margin-inline: 16px; }
+}
+@media (max-width: 480px) {
+  .runtime-heading { gap: 3px; }
+  .runtime-heading h1 { font-size: 15px; }
+  .runtime-heading .icon-button { width: 30px; }
+  .runtime-kicker { font-size: 9px; }
+  .runtime-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .runtime-tabs button { justify-content: center; font-size: 11px; }
+  .runtime-tabs svg { display: none; }
+  .runtime-form { grid-template-columns: minmax(0, 1fr); }
+  .runtime-facts { grid-template-columns: minmax(0, 1fr); }
+  .runtime-section-title .button { min-height: 32px; padding-inline: 8px; }
+  .runtime-section-title h2 { font-size: 13px; }
+}

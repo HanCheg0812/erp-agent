@@ -3,17 +3,17 @@ use super::{
     provider::{call, configured, matches, remote_id, unavailable},
     repository::{ROW, save},
 };
-use crate::{auth::Principal, platform::*};
+use crate::{agent_sessions, auth::Principal, platform::*};
 use serde_json::{Value, json};
 
 async fn release_leases(db: &tokio_postgres::Client, row: &Value) -> Result<()> {
     let session = row["session_id"].as_str().unwrap_or_default();
-    if !session.is_empty() {
-        db.execute(
-            "UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1",
-            &[&session],
-        )
-        .await?;
+    if let Some(lease) = row["session_lease_id"].as_str() {
+        if !session.is_empty() {
+            agent_sessions::revoke_runtime_lease(db, uuid(lease)?, session).await?;
+        }
+    } else if row["active"] != false && !session.is_empty() {
+        agent_sessions::revoke_base(db, session).await?;
     }
     if let Some(mcp) = row["mcp_session_id"].as_str() {
         db.execute(
@@ -50,6 +50,16 @@ async fn reconcile_inner(
             .iter()
             .filter(|r| r["metadata"]["erp_operation"] == row["id"])
             .collect::<Vec<_>>();
+        if found.is_empty() && (row["state"] == "releasing" || row["expired"] == true) {
+            release_leases(&***db, &row).await?;
+            return save(
+                db,
+                actor,
+                &row,
+                json!({"state":"released","provider_state":null,"guest_ready":false,"error_code":null}),
+            )
+            .await;
+        }
         if found.len() != 1 || !matches(found[0], &row) {
             return save(
                 db,
@@ -60,7 +70,12 @@ async fn reconcile_inner(
             .await;
         }
         let id = remote_id(found[0])?;
-        row = save(db, actor, &row, json!({"sandbox_id":id})).await?;
+        let patch = if super::bridge::enabled() {
+            json!({"sandbox_id":id,"error_code":"configuration_pending","guest_ready":false})
+        } else {
+            json!({"sandbox_id":id})
+        };
+        row = save(db, actor, &row, patch).await?;
     }
     let path = format!("/sandboxes/{}", row["sandbox_id"].as_str().unwrap());
     let mut remote = call(app, &path, reqwest::Method::GET, None).await?;
@@ -90,6 +105,12 @@ async fn reconcile_inner(
             json!({"guest_ready":false,"error_code":"scope_mismatch"}),
         )
         .await;
+    }
+    if row["error_code"] == "configuration_pending"
+        && row["state"] != "releasing"
+        && row["expired"] != true
+    {
+        return Ok(row);
     }
     // Cube drops guest-initiated outbound sockets on pause. Persist the reset
     // requirement before resuming so a retry can rebuild JCode's connections.

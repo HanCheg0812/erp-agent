@@ -21,13 +21,23 @@ pub(super) async fn call(
     if let Some(body) = body {
         request = request.json(&body)
     }
-    let response = request.send().await.map_err(|_| unavailable())?;
+    let response = request.send().await.map_err(|error| {
+        eprintln!("Cube provider transport error: method={method} path={path} error={error}");
+        unavailable()
+    })?;
     if response.status() == 404
         && (method == reqwest::Method::GET || method == reqwest::Method::DELETE)
     {
         return Ok(Value::Null);
     }
     if !response.status().is_success() {
+        // Keep provider diagnostics out of the business response. The status
+        // and route are enough to distinguish a transient Cube API failure
+        // from a malformed payload without logging credentials or bodies.
+        eprintln!(
+            "Cube provider HTTP error: method={method} path={path} status={}",
+            response.status()
+        );
         return Err(unavailable());
     }
     if response.status() == 204 {
@@ -83,7 +93,7 @@ pub(super) async fn preflight(app: &App, template: &str) -> Result<()> {
     Ok(())
 }
 
-fn template_ready(template: &Value, nodes: &Value) -> bool {
+pub(super) fn template_ready(template: &Value, nodes: &Value) -> bool {
     template["status"] == "READY"
         && template["replicas"].as_array().is_some_and(|replicas| {
             replicas.iter().any(|replica| {
@@ -109,6 +119,8 @@ pub(super) fn matches(remote: &Value, row: &Value) -> bool {
     .iter()
     .all(|(a, b)| m[*a].is_string() && m[*a] == row[*b])
         && (m.get("erp_user").is_none() || m["erp_user"] == row["actor_id"])
+        && (m.get("erp_template").is_none() || m["erp_template"] == row["runtime_template_id"])
+        && (row["runtime_template_id"].is_null() || remote["templateID"] == row["runtime_template_id"])
 }
 pub(super) fn remote_id(remote: &Value) -> Result<&str> {
     remote["sandboxID"]

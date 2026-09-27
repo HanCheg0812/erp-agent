@@ -4,5 +4,6 @@ import App from './App';
 import './styles.css';
 import './chat.css';
 import './auth.css';
+import './runtime.css';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

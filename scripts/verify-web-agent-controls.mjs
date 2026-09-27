@@ -21,7 +21,7 @@ async function capture(name) {
   const composer = await page.locator('.chat-composer').boundingBox();
   const send = await page.getByRole('button', { name: 'Send message', exact: true }).boundingBox();
   const mic = await page.getByRole('button', { name: 'Voice input', exact: true }).boundingBox();
-  const add = await page.getByRole('button', { name: 'Add attachment or compress context', exact: true }).boundingBox();
+  const add = await page.getByRole('button', { name: 'Add attachment', exact: true }).boundingBox();
   assert(composer && composer.y >= 0 && composer.y + composer.height <= page.viewportSize().height + 1);
   assert(composer.x >= 0 && composer.x + composer.width <= page.viewportSize().width + 1, `${name}: composer must fit viewport`);
   const header = await page.locator('.chat-header').boundingBox();
@@ -49,17 +49,18 @@ try {
   await page.getByLabel('Email', { exact: true }).fill(process.env.DEMO_EMAIL);
   await page.getByLabel('Password', { exact: true }).fill(process.env.DEMO_PASSWORD);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.getByText('My workspace', { exact: true }).waitFor();
+  await page.locator('.chat-app').waitFor();
   token = await page.evaluate(() => localStorage.getItem('erp-agent-token'));
   await page.locator('.conversation-item').filter({ hasText: '请先用 ERP 工具列出当前有权限' }).first().click();
-  await page.locator('.agent-markdown').filter({ hasText: 'SAL-ORD-' }).waitFor();
+  await page.locator('.answer-text .agent-markdown').filter({ hasText: 'SAL-ORD-' }).waitFor();
   await page.locator('.agent-table-scroll table').waitFor();
   await capture('desktop-chat');
-  await page.locator('.thinking-toggle').click();
-  for (const text of ['ERP / List orders', 'ERP / Read order', 'OpenViking / Search evidence']) await page.locator('.process-tool-name').filter({ hasText: text }).waitFor();
-  await page.locator('.process-tool-name').filter({ hasText: 'ERP / Read order' }).scrollIntoViewIfNeeded();
+  const thinkingToggle = page.locator('.thinking-toggle');
+  if (await thinkingToggle.getAttribute('aria-expanded') === 'false') await thinkingToggle.click();
+  for (const label of [/^查看订单已完成$/, /^查看订单详情已完成$/, /^搜索业务资料失败$/]) await page.locator('.process-tool-name').filter({ hasText: label }).waitFor();
+  await page.locator('.process-tool-name').filter({ hasText: /^查看订单详情已完成$/ }).scrollIntoViewIfNeeded();
   await capture('desktop-tools');
-  await page.locator('.thinking-toggle').click();
+  await thinkingToggle.click();
   report.checks.push('Real ERP list/read and failed unconfigured OpenViking call render in the expandable timeline');
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });

@@ -1,0 +1,11 @@
+[Unit]
+Description=Forge ERP Agent health snapshot timer
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+Persistent=true
+Unit=erp-agent-monitoring-health.service
+
+[Install]
+WantedBy=timers.target

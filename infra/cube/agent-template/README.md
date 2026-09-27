@@ -57,8 +57,38 @@ requiring GLIBC 2.39. If the Cube node is pinned to an older rootfs, build the
 binary inside that same rootfs or publish a musl-compatible build instead of
 silently accepting a container that exits before readiness.
 
+The OCI image declares `USER forge` (UID 10001). A 2026-09-25 Cube v0.7.2
+`create-from-image` instance nevertheless ran the Bridge as root, while direct
+Docker execution of the same image ran as `forge`. The entrypoint now drops
+root to UID/GID 10001 with `setpriv` before starting the Bridge, and rejects
+unexpected non-root identities. Verify the actual guest identity with the
+scoped diagnostic probe when building a new template; the OCI metadata alone
+is not sufficient evidence. The probe is disabled for normal Agent runs.
+
 The Cube template creation request should set `CUBE_TEMPLATE_WARMUP=1`, expose
 guest port `49999`, and probe `/health/ready`. The warmup environment remains
 credential-free. The backend configures each normal instance after creation,
 before the first turn. The Bridge emits its skill catalog on every turn because
 the Worker validates the catalog separately for each persisted run.
+
+Set `--cpu` and `--memory` explicitly when creating a template. The local
+`create-from-image` defaults (2000m CPU and 2000 MiB per instance) exhausted the
+single healthy node's scheduler quota during a 50-case burst. A 750m/1024 MiB
+template passed the short-prompt and eight-case ERP read probes; long-context,
+image, and ingestion workloads still need separate sizing. Check the actual
+`templateID` and resources on created instances before attributing a benchmark
+to a template.
+
+For the local Cube v0.7.2 `cubemastercli template create-from-image` path, passing
+`--env` did not preserve the image's `ENV` values in the template probe. Supply
+all credential-free startup values explicitly:
+
+```sh
+--env CUBE_TEMPLATE_WARMUP=1 --env AGENT_RUNTIME_MODE=resident \
+--env AGENT_RUNTIME_BIND=0.0.0.0:49999 --env HOME=/home/forge \
+--env JCODE_HOME=/home/forge/jcode
+```
+
+Omitting `AGENT_RUNTIME_MODE` made the probe start the legacy stdin/stdout path
+and fail with `PostgreSQL session store is required`. A READY template still
+needs a real, configured instance turn before it is used for local Agent work.

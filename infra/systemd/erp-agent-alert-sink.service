@@ -1,0 +1,19 @@
+[Unit]
+Description=Forge ERP Agent local alert webhook sink
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/erp-agent
+Environment=MONITORING_ALERT_SINK_HOST=127.0.0.1
+Environment=MONITORING_ALERT_SINK_PORT=29198
+Environment=MONITORING_ALERT_LOG=.runtime/monitoring/alerts.jsonl
+ExecStart=%h/.local/bin/node %h/erp-agent/scripts/monitoring-alert-sink.mjs
+Restart=on-failure
+RestartSec=2s
+KillMode=mixed
+TimeoutStopSec=15s
+UMask=0027
+
+[Install]
+WantedBy=default.target

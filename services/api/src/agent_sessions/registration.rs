@@ -71,6 +71,52 @@ pub async fn claim<C: GenericClient + Sync>(db: &C, actor: &Principal, id: &str)
     value["storage_token"] = json!(token);
     Ok(value)
 }
+
+/// Issue a second storage lease for a resident runtime without invalidating
+/// the token used by the currently active sandbox. The lease is revoked only
+/// after the new sandbox has passed its health check and is promoted.
+pub(crate) async fn claim_runtime<C: GenericClient + Sync>(
+    db: &C,
+    actor: &Principal,
+    id: &str,
+) -> Result<Value> {
+    actor.require("planner")?;
+    session_id(id)?;
+    let token = auth::token();
+    let lease_id = Uuid::new_v4();
+    let row = db
+        .query_opt(
+            "INSERT INTO agent_session_runtime_leases(id,session_id,token_hash,expires_at) SELECT $1,s.id,$2,now()+interval '8 hours' FROM agent_sessions s JOIN cases c ON c.id=s.case_id AND c.tenant_id=s.tenant_id AND c.owner_id=s.owner_id JOIN users u ON u.id=s.owner_id AND u.tenant_id=s.tenant_id WHERE s.id=$3 AND s.tenant_id=$4 AND s.owner_id=$5 AND u.active AND 'planner'=ANY(u.roles) RETURNING jsonb_build_object('id',session_id,'lease_id',id,'expires_at',expires_at)",
+            &[&lease_id, &digest(&token), &id, &actor.tenant_id, &actor.user_id],
+        )
+        .await?
+        .ok_or_else(Error::missing)?;
+    let mut value: Value = row.get(0);
+    value["storage_token"] = json!(token);
+    Ok(value)
+}
+
+pub(crate) async fn revoke_runtime_lease<C: GenericClient + Sync>(
+    db: &C,
+    lease_id: Uuid,
+    session_id: &str,
+) -> Result<()> {
+    db.execute(
+        "UPDATE agent_session_runtime_leases SET revoked_at=now() WHERE id=$1 AND session_id=$2 AND revoked_at IS NULL",
+        &[&lease_id, &session_id],
+    )
+    .await?;
+    Ok(())
+}
+
+pub(crate) async fn revoke_base<C: GenericClient + Sync>(db: &C, session_id: &str) -> Result<()> {
+    db.execute(
+        "UPDATE agent_sessions SET token_hash=NULL,expires_at=NULL WHERE id=$1",
+        &[&session_id],
+    )
+    .await?;
+    Ok(())
+}
 pub async fn claim_route(app: App, actor: Principal, id: String) -> Result<Value> {
     let db = app.db.get().await?;
     claim(&**db, &actor, &id).await

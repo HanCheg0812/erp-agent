@@ -4,9 +4,11 @@
 
 当前交接见 [implementation-status](implementation-status.md)，包含已验证能力和最多四项近期任务。
 
+当前主机的持久服务、监控目标、Alertmanager canary 和长期运行边界见 [监控部署记录](monitoring-deployment.md)。
+
 Cube 官方控制台的本地入口、服务托管和监控验证状态见 [Web UI 验证](cube-webui.md)。
 
-当前目标是让 JCode 复用 Cube 的不同模板环境：既可运行于兼容模板内，也可通过受控工具调用其他模板实例，见 [Cube 模板接入计划与验收](runtime-management.md)。额外代码模板的受控数量汇总工具已通过四轮真实 Cube/JCode 对话、实例重建和 1440/390/320 px Web 刷新检查；现有常驻模板另通过四会话冷/暖两轮并发检查。代码工具并发、浏览器/解析模板、guest 指标和长期监控仍未验收，默认 release 未切换。新增 Forge 管理页是尚未提交的偏离目标实验；不以新增或迁移管理页代替模板接入。
+当前目标是让 JCode 复用 Cube 的不同模板环境：既可运行于兼容模板内，也可通过受控工具调用其他模板实例，见 [Cube 模板接入计划与验收](runtime-management.md)。额外代码模板的受控数量汇总工具已通过四轮真实 Cube/JCode 对话、实例重建和 1440/390/320 px Web 刷新检查；现有常驻模板另通过四会话冷/暖两轮并发检查。当前主机的 API/worker、Cube 探针和 Prometheus/Alertmanager/Grafana 监控已在 2026-09-27 持久部署；代码工具并发、浏览器/解析模板、guest 指标和长期业务混合负载仍未验收，默认 release 未切换。新增 Forge 管理页是尚未提交的偏离目标实验；不以新增或迁移管理页代替模板接入。
 
 输入框的“请求批准 / 帮我批准 / 完全访问”现在按会话持久化到 PostgreSQL；切换会立即 PATCH 当前会话，下一轮由后端注入权威权限上下文，运行中的回合拒绝切换。通用工具授权与业务审批见[通用工具授权与业务审批](approval-workflow.md)。流式中断修复见[原因与验收](stream-recovery-fix.md)。
 
@@ -34,7 +36,11 @@ Web Agent Chat 与灰白视觉的实现、验证及边界见 [Web 会话记录](
 
 当前新增身份与权限设计：[ERP MCP 与 EBAC](erp-mcp-ebac.md)，以及配套的[ERP MCP 工具目录](erp-mcp-tools.md)。身份权限先于 ERP 写入实现；当前 ERP 只读工具已接入工具级 EBAC，支持无任务/任务绑定 MCP capability，并通过 `erp_connections` / `erp_identity_bindings` 绑定演示用户的个人凭据引用。正式凭据服务、目标生产 ERPNext 复核和受控写入仍待验收。下一阶段按[ERP MCP 下一阶段设计](erp-mcp-next-phase.md)推进只读生产化、业务推演和受控写入。
 
-业务基础已实现：分域 API、PostgreSQL、身份、案件、方案版本、审批幂等、事务审计、Web 对话保存与 Cube 实例生命周期。JCode 源码已固定引入，其 PostgreSQL 存储补丁在真实模型循环与主机进程重启中通过验证。Cube v0.7.2 常驻 Runtime Bridge 已完成真实合成案件首轮、同案件续轮和 API/Worker 重启后续轮；两个案件使用独立实例和会话。暂停/重建恢复、并发容量、OpenViking 检索和生产部署验收仍未完成，见[常驻运行时记录](cube-resident-runtime.md)。Cube 内外两种方案的[调研记录](../../../architecture/cube-runtime-placement.md)已落盘。
+业务基础已实现：分域 API、PostgreSQL、身份、案件、方案版本、审批幂等、事务审计、Web 对话保存与 Cube 实例生命周期。JCode 源码已固定引入，其 PostgreSQL 存储补丁在真实模型循环与主机进程重启中通过验证。Cube v0.7.2 常驻 Runtime Bridge 已完成合成案件首轮、同案件续轮、API/Worker 重启后续轮、同实例暂停恢复、销毁重建续轮与 50 用户并发探针；两个案件使用独立实例和会话。同口径性能归因、长期混合负载、OpenViking 检索和生产部署验收仍未完成，见[常驻运行时记录](cube-resident-runtime.md)。Cube 内外两种方案的[调研记录](../../../architecture/cube-runtime-placement.md)已落盘。
+
+2026-09-25：真实 Cube 只读探针发现旧模板的 Bridge 实际以 root 运行；入口脚本降权后，新模板冷/暖回合的 PostgreSQL 工具原始结果均为 `forge` UID 10001。临时 Bash 开关恢复为关闭，并以零工具调用回合复核；命令、报告和剩余边界见[常驻运行时记录](cube-resident-runtime.md)。
+
+2026-09-26：常驻 Cube 同会话跨回合切换 Pro/Flash 的模型遗漏已修复；真实浏览器检查了 JCode PostgreSQL 会话元数据、停止持久化、ERP 工具时间线及 1440/390/320 的聊天控件，证据与限制见[实施状态](implementation-status.md)。
 
 2026-09-26 环境读取补充：按用户要求，本地固定只读探针现已开启；真实 Cube 执行五条命令并持久化到 PostgreSQL，Web 显示“读取运行环境”。默认配置仍关闭，通用 Bash 仍禁用；复测结果和现存实例的配置生效边界见[常驻运行时记录](cube-resident-runtime.md)。
 

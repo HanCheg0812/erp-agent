@@ -9,7 +9,19 @@ use axum::http::StatusCode;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
+use std::time::Instant;
+use tokio_postgres::GenericClient;
 use uuid::Uuid;
+
+#[derive(Default, serde::Serialize)]
+pub(crate) struct ReadyTiming {
+    pub(crate) status_ms: u64,
+    pub(crate) status_checks: u32,
+    pub(crate) create_request_ms: Option<u64>,
+    pub(crate) configure_ms: Option<u64>,
+    pub(crate) create_operation_ms: Option<u64>,
+    pub(crate) ready_ms: Option<u64>,
+}
 
 fn add_internal_allow_out(values: &mut Vec<String>, host: &str) {
     let host = host.trim();
@@ -102,6 +114,14 @@ fn resident_envs(
         (
             "AGENT_TURN_TIMEOUT_SECONDS".into(),
             env("AGENT_TURN_TIMEOUT_SECONDS", "0"),
+        ),
+        (
+            "FORGE_TEMP_BASH_PROBE".into(),
+            match env("AGENT_TEMP_BASH_PROBE", "0").as_str() {
+                "0" => "0".to_owned(),
+                "1" => "1".to_owned(),
+                _ => return Err(Error::bad("Invalid temporary Bash probe setting")),
+            },
         ),
         (
             "AGENT_COMPACTION_SOFT_RATIO".into(),
@@ -262,6 +282,7 @@ pub(crate) async fn ensure_resident_ready(
     app: &App,
     actor: &Principal,
     case_id: Uuid,
+    timing: &mut ReadyTiming,
 ) -> Result<()> {
     let ready_timeout = env("CUBE_RUNTIME_READY_TIMEOUT_SECONDS", "60")
         .parse::<u64>()
@@ -275,13 +296,78 @@ pub(crate) async fn ensure_resident_ready(
     let started = std::time::Instant::now();
     let mut create_attempted = false;
     loop {
+        let status_started = Instant::now();
         let status = operate(app, actor, case_id, "status", None).await?;
+        timing.status_ms += status_started.elapsed().as_millis() as u64;
+        timing.status_checks += 1;
         let operation = status.get("operation").and_then(Value::as_object);
         if operation.is_some_and(|value| {
             value.get("state").and_then(Value::as_str) == Some("provisioned")
                 && value.get("guest_ready").and_then(Value::as_bool) == Some(true)
         }) {
+            timing.ready_ms = Some(started.elapsed().as_millis() as u64);
             return Ok(());
+        }
+
+        // A failed create remains available for metadata reconciliation. On a
+        // later turn, release it only after a short grace period and another
+        // provider lookup; the release path keeps ambiguous/mismatched results.
+        if operation.is_some_and(|value| {
+            value.get("state").and_then(Value::as_str) == Some("creating")
+                && value.get("sandbox_id").is_none_or(Value::is_null)
+                && matches!(
+                    value.get("error_code").and_then(Value::as_str),
+                    Some("creation_unconfirmed" | "cube_unavailable")
+                )
+        }) {
+            let operation = operation.unwrap();
+            let old_enough = operation
+                .get("created_at")
+                .and_then(Value::as_str)
+                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                .is_some_and(|created| {
+                    chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())
+                        .signed_duration_since(created)
+                        .num_seconds()
+                        >= 5
+                });
+            if old_enough && !create_attempted {
+                let operation_id = operation
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::bad("Invalid sandbox operation"))?;
+                let released =
+                    operate(app, actor, case_id, "release", Some(uuid(operation_id)?)).await?;
+                if released["operation"]["state"] == "released" {
+                    continue;
+                }
+            }
+            return Err(Error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "cube_runtime_create_unconfirmed",
+                "Cube did not confirm sandbox creation; retry after reconciliation",
+            ));
+        }
+
+        if operation.is_some_and(|value| {
+            value.get("state").and_then(Value::as_str) != Some("released")
+                && value.get("error_code").and_then(Value::as_str) == Some("configuration_pending")
+        }) {
+            let operation_id = operation
+                .unwrap()
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| Error::bad("Invalid sandbox operation"))?;
+            let released =
+                operate(app, actor, case_id, "release", Some(uuid(operation_id)?)).await?;
+            if released["operation"]["state"] == "released" {
+                continue;
+            }
+            return Err(Error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "cube_runtime_create_unconfirmed",
+                "Cube resident could not be safely reconfigured",
+            ));
         }
 
         let active = operation.is_some_and(|value| {
@@ -292,7 +378,18 @@ pub(crate) async fn ensure_resident_ready(
         });
         if !active && !create_attempted {
             actor.require("planner")?;
-            operate(app, actor, case_id, "create", Some(Uuid::new_v4())).await?;
+            let create_started = Instant::now();
+            let create = operate_timed(
+                app,
+                actor,
+                case_id,
+                "create",
+                Some(Uuid::new_v4()),
+                Some(timing),
+            )
+            .await;
+            timing.create_operation_ms = Some(create_started.elapsed().as_millis() as u64);
+            create?;
             create_attempted = true;
         }
 
@@ -305,6 +402,20 @@ pub(crate) async fn ensure_resident_ready(
         }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
+}
+
+pub(crate) async fn switch_pending<C: GenericClient + Sync>(
+    db: &C,
+    tenant_id: Uuid,
+    case_id: Uuid,
+) -> Result<bool> {
+    Ok(db
+        .query_one(
+            "SELECT EXISTS(SELECT 1 FROM case_sandboxes WHERE tenant_id=$1 AND case_id=$2 AND active=false AND state<>'released')",
+            &[&tenant_id, &case_id],
+        )
+        .await?
+        .get(0))
 }
 fn view(mut row: Value) -> Value {
     if let Some(o) = row.as_object_mut() {
@@ -374,6 +485,17 @@ pub(super) async fn operate(
     action: &str,
     operation: Option<Uuid>,
 ) -> Result<Value> {
+    operate_timed(app, actor, id, action, operation, None).await
+}
+
+async fn operate_timed(
+    app: &App,
+    actor: &Principal,
+    id: Uuid,
+    action: &str,
+    operation: Option<Uuid>,
+    timing: Option<&mut ReadyTiming>,
+) -> Result<Value> {
     let mut db = app.db.get().await?;
     cases::case(&**db, actor, id, false).await?;
     let key = format!("erp-cube:{}:{id}", actor.tenant_id);
@@ -387,7 +509,7 @@ pub(super) async fn operate(
     if !locked {
         return Err(Error::conflict("sandbox_busy"));
     }
-    let result = operate_locked(app, &mut db, actor, id, action, operation).await;
+    let result = operate_locked(app, &mut db, actor, id, action, operation, timing).await;
     if db
         .query_one("SELECT pg_advisory_unlock(hashtextextended($1,0))", &[&key])
         .await
@@ -404,11 +526,12 @@ async fn operate_locked(
     id: Uuid,
     action: &str,
     operation: Option<Uuid>,
+    mut timing: Option<&mut ReadyTiming>,
 ) -> Result<Value> {
     if action != "status" {
         actor.require("planner")?;
     }
-    let current=db.query_opt(&format!("SELECT {ROW} FROM case_sandboxes s WHERE tenant_id=$1 AND case_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1"),&[&actor.tenant_id,&id]).await?.map(|r|r.get::<_,Value>(0));
+    let current=db.query_opt(&format!("SELECT {ROW} FROM case_sandboxes s WHERE tenant_id=$1 AND case_id=$2 AND active=true AND state<>'released' ORDER BY created_at DESC,id DESC LIMIT 1"),&[&actor.tenant_id,&id]).await?.map(|r|r.get::<_,Value>(0));
     let row = if action == "create" {
         if !configured() {
             return Err(Error(
@@ -439,9 +562,14 @@ async fn operate_locked(
                     return Err(Error::conflict("sandbox_exists"));
                 }
             }
-            preflight(app, &env("CUBE_TEMPLATE_ID", "")).await?;
+            let selected = super::management::selection(&***db, id).await?;
+            preflight(app, &selected.template_id).await?;
             let tx = db.transaction().await?;
             cases::case(&*tx, actor, id, true).await?;
+            let confirmed = super::management::selection(&*tx, id).await?;
+            if confirmed.template_id != selected.template_id || confirmed.release_id != selected.release_id || confirmed.version != selected.version {
+                return Err(Error::conflict("runtime_version_changed"));
+            }
             let session = agent_sessions::bind(&tx, actor, id).await?;
             let mut mcp_session_id: Option<String> = None;
             let mut env_vars = None;
@@ -469,7 +597,7 @@ async fn operate_locked(
                 )?);
                 mcp_session_id = Some(mcp_id);
             }
-            let mut row=object(&*tx,&format!("INSERT INTO case_sandboxes AS s(id,tenant_id,case_id,session_id,actor_id,mcp_session_id,state) VALUES($1,$2,$3,$4,$5,$6,'creating') RETURNING {ROW}"),&[&operation,&actor.tenant_id,&id,&session,&actor.user_id,&mcp_session_id]).await?;
+            let mut row=object(&*tx,&format!("INSERT INTO case_sandboxes AS s(id,tenant_id,case_id,session_id,actor_id,mcp_session_id,state,runtime_template_id,runtime_candidate_id,runtime_release_id) VALUES($1,$2,$3,$4,$5,$6,'creating',$7,$8,$9) RETURNING {ROW}"),&[&operation,&actor.tenant_id,&id,&session,&actor.user_id,&mcp_session_id,&selected.template_id,&selected.candidate_id,&selected.release_id]).await?;
             cases::audit(
                 &*tx,
                 actor,
@@ -479,39 +607,57 @@ async fn operate_locked(
             )
             .await?;
             tx.commit().await?;
-            let metadata = json!({"project":"erp-agent","erp_operation":operation,"erp_case":id,"erp_tenant":actor.tenant_id,"erp_user":actor.user_id,"erp_session":session});
+            let metadata = json!({"project":"erp-agent","erp_operation":operation,"erp_case":id,"erp_tenant":actor.tenant_id,"erp_user":actor.user_id,"erp_session":session,"erp_template":selected.template_id});
             let allow_out = cube_allow_out()?;
             let create_request = json!({
-                "templateID":env("CUBE_TEMPLATE_ID",""),
+                "templateID":selected.template_id,
                 "timeout":900,
                 "allow_internet_access":false,
                 "metadata":metadata,
                 "network":{"allow_out":allow_out}
             });
             let runtime_envs = env_vars;
-            if let Ok(created) = call(
+            let create_request_started = Instant::now();
+            let created = call(
                 app,
                 "/sandboxes",
                 reqwest::Method::POST,
                 Some(create_request),
             )
-            .await
-            {
-                let sandbox_id = remote_id(&created)?;
-                // Cube's create acknowledgement contains the ID but no metadata.
-                // Read the instance before binding its ID and credentials.
-                if let Ok(remote) = call(
-                    app,
-                    &format!("/sandboxes/{sandbox_id}"),
-                    reqwest::Method::GET,
-                    None,
-                )
-                .await
-                {
-                    if !matches(&remote, &row) {
-                        return Err(Error::conflict("sandbox_scope_mismatch"));
+            .await;
+            if let Some(timing) = timing.as_deref_mut() {
+                timing.create_request_ms =
+                    Some(create_request_started.elapsed().as_millis() as u64);
+            }
+            match created {
+                Ok(created) => {
+                    let sandbox_id = remote_id(&created)?;
+                    // Cube's create acknowledgement contains the ID but no metadata.
+                    // Read the instance before binding its ID and credentials.
+                    if let Ok(remote) = call(
+                        app,
+                        &format!("/sandboxes/{sandbox_id}"),
+                        reqwest::Method::GET,
+                        None,
+                    )
+                    .await
+                    {
+                        if !matches(&remote, &row) {
+                            return Err(Error::conflict("sandbox_scope_mismatch"));
+                        }
+                        row = save(db, actor, &row, json!({"sandbox_id":sandbox_id})).await?;
                     }
-                    row = save(db, actor, &row, json!({"sandbox_id":sandbox_id})).await?;
+                }
+                Err(error) => {
+                    // A non-2xx response is ambiguous: Cube may have accepted
+                    // the request before returning an error. Reconcile once by
+                    // the unique operation metadata, then stop immediately if
+                    // no instance can be found. This preserves safe retry
+                    // semantics without waiting for the readiness deadline.
+                    row = reconcile(app, db, actor, row).await?;
+                    if row["sandbox_id"].is_null() {
+                        return Err(error);
+                    }
                 }
             }
             row = reconcile(app, db, actor, row).await?;
@@ -519,7 +665,13 @@ async fn operate_locked(
                 (runtime_envs.as_ref(), row["sandbox_id"].as_str())
             {
                 if row["state"] != "released" && row["error_code"] != "scope_mismatch" {
-                    configure_guest(app, sandbox_id, operation, env_vars).await?;
+                    let configure_started = Instant::now();
+                    let configured = configure_guest(app, sandbox_id, operation, env_vars).await;
+                    if let Some(timing) = timing.as_deref_mut() {
+                        timing.configure_ms = Some(configure_started.elapsed().as_millis() as u64);
+                    }
+                    configured?;
+                    row = save(db, actor, &row, json!({"error_code":null})).await?;
                     row = reconcile(app, db, actor, row).await?;
                 }
             }
@@ -546,4 +698,355 @@ async fn operate_locked(
     Ok(
         json!({"configured":configured(),"can_manage":actor.roles.iter().any(|r|r=="planner"),"operation":row.map(view)}),
     )
+}
+
+pub(crate) async fn switch_template(
+    app: &App,
+    actor: &Principal,
+    id: Uuid,
+    request_id: Uuid,
+    template_id: String,
+) -> Result<Value> {
+    actor.require("planner")?;
+    let mut db = app.db.get().await?;
+    cases::case(&**db, actor, id, false).await?;
+    let key = format!("erp-cube:{}:{id}", actor.tenant_id);
+    let locked: bool = db
+        .query_one(
+            "SELECT pg_try_advisory_lock(hashtextextended($1,0))",
+            &[&key],
+        )
+        .await?
+        .get(0);
+    if !locked {
+        return Err(Error::conflict("sandbox_busy"));
+    }
+    let result = switch_locked(app, &mut db, actor, id, request_id, &template_id).await;
+    if db
+        .query_one("SELECT pg_advisory_unlock(hashtextextended($1,0))", &[&key])
+        .await
+        .is_err()
+    {
+        drop(deadpool_postgres::Object::take(db));
+    }
+    result
+}
+
+async fn switch_locked(
+    app: &App,
+    db: &mut deadpool_postgres::Object,
+    actor: &Principal,
+    case_id: Uuid,
+    request_id: Uuid,
+    template_id: &str,
+) -> Result<Value> {
+    if !configured() {
+        return Err(Error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "cube_not_configured",
+            "Runtime provider is not configured",
+        ));
+    }
+    let mut current = db
+        .query_opt(
+            &format!("SELECT {ROW} FROM case_sandboxes s WHERE tenant_id=$1 AND case_id=$2 AND active=true AND state<>'released' ORDER BY created_at DESC,id DESC LIMIT 1"),
+            &[&actor.tenant_id, &case_id],
+        )
+        .await?
+        .map(|row| row.get::<_, Value>(0))
+        .ok_or_else(Error::missing)?;
+    current = reconcile(app, db, actor, current).await?;
+    if current["state"] == "released" || current["active"] == false {
+        return Err(Error::missing());
+    }
+    if current["runtime_template_id"].as_str() == Some(template_id) {
+        return Err(Error::conflict("runtime_template_unchanged"));
+    }
+    let busy: bool = db
+        .query_one(
+            "SELECT EXISTS(SELECT 1 FROM agent_runs WHERE tenant_id=$1 AND case_id=$2 AND state IN ('queued','running','waiting'))",
+            &[&actor.tenant_id, &case_id],
+        )
+        .await?
+        .get(0);
+    if busy {
+        return Err(Error::conflict("agent_busy"));
+    }
+
+    let prior = db
+        .query_opt(
+            &format!("SELECT {ROW} FROM case_sandboxes s WHERE id=$1"),
+            &[&request_id],
+        )
+        .await?
+        .map(|row| row.get::<_, Value>(0));
+    let (selected, mut target) = if let Some(prior) = prior {
+        if prior["tenant_id"] != actor.tenant_id.to_string()
+            || prior["case_id"] != case_id.to_string()
+            || prior["actor_id"] != actor.user_id.to_string()
+            || prior["active"] == true
+        {
+            return Err(Error::conflict("idempotency_conflict"));
+        }
+        if prior["runtime_template_id"].as_str() != Some(template_id) {
+            return Err(Error::conflict("idempotency_conflict"));
+        }
+        let selected = super::management::selection_for_template(&***db, template_id).await?;
+        let target = reconcile(app, db, actor, prior).await?;
+        (selected, target)
+    } else {
+        let selected = super::management::selection_for_template(&***db, template_id).await?;
+        preflight(app, &selected.template_id).await?;
+        let target = match create_switch_target(
+            app,
+            db,
+            actor,
+            case_id,
+            request_id,
+            &current,
+            &selected,
+        )
+        .await
+        {
+            Ok(target) => target,
+            Err(error) if error.1 == "cube_unavailable" => {
+                return Err(Error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "cube_runtime_not_ready",
+                    "The replacement Cube sandbox could not be created",
+                ));
+            }
+            Err(error) => return Err(error),
+        };
+        (selected, target)
+    };
+
+    if target["state"] == "released" {
+        return Err(Error::conflict("switch_operation_released"));
+    }
+    if target["state"] != "provisioned" || target["guest_ready"] != true {
+        cleanup_switch_target(app, db, actor, request_id).await;
+        return Err(Error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "cube_runtime_not_ready",
+            "The replacement Cube sandbox did not become ready",
+        ));
+    }
+    let active = db
+        .query_one(
+            &format!("SELECT {ROW} FROM case_sandboxes s WHERE tenant_id=$1 AND case_id=$2 AND active=true AND state<>'released' ORDER BY created_at DESC,id DESC LIMIT 1"),
+            &[&actor.tenant_id, &case_id],
+        )
+        .await?;
+    current = active.get(0);
+    if current["id"] == target["id"] {
+        return Ok(json!({
+            "configured": configured(),
+            "switched": true,
+            "operation": view(target),
+        }));
+    }
+    let old_id = uuid(current["id"].as_str().ok_or_else(Error::missing)?)?;
+    let (old, promoted) = promote_switch(app, db, actor, case_id, old_id, request_id).await?;
+    let old = reconcile(app, db, actor, old.clone()).await.unwrap_or(old);
+    target = promoted;
+    Ok(json!({
+        "configured": configured(),
+        "switched": true,
+        "previous_operation_id": old["id"],
+        "previous_state": old["state"],
+        "operation": view(target),
+        "template_id": selected.template_id,
+    }))
+}
+
+async fn create_switch_target(
+    app: &App,
+    db: &mut deadpool_postgres::Object,
+    actor: &Principal,
+    case_id: Uuid,
+    operation: Uuid,
+    current: &Value,
+    selected: &super::management::Selection,
+) -> Result<Value> {
+    let result: Result<Value> = async {
+        let session = current["session_id"].as_str().ok_or_else(Error::missing)?;
+        let tx = db.transaction().await?;
+        cases::case(&*tx, actor, case_id, true).await?;
+        let claim = agent_sessions::claim_runtime(&*tx, actor, session).await?;
+        let settings: crate::integrations::Settings = serde_json::from_value(
+            tx.query_one(
+                "SELECT settings FROM case_conversations WHERE tenant_id=$1 AND case_id=$2",
+                &[&actor.tenant_id, &case_id],
+            )
+            .await?
+            .get(0),
+        )
+        .map_err(|_| Error::bad("Invalid conversation settings"))?;
+        settings.validate()?;
+        let (mcp_id, mcp_token) = mcp_sessions::insert(&*tx, actor, Some(case_id), None).await?;
+        let env_vars = if super::bridge::enabled() {
+            Some(resident_envs(
+                app,
+                operation,
+                session,
+                claim["storage_token"].as_str().ok_or_else(Error::missing)?,
+                &mcp_id,
+                &mcp_token,
+                &settings,
+            )?)
+        } else {
+            None
+        };
+        let lease_id = uuid(claim["lease_id"].as_str().ok_or_else(Error::missing)?)?;
+        let mut row = object(
+            &*tx,
+            &format!("INSERT INTO case_sandboxes AS s(id,tenant_id,case_id,session_id,actor_id,mcp_session_id,active,session_lease_id,state,runtime_template_id,runtime_candidate_id,runtime_release_id) VALUES($1,$2,$3,$4,$5,$6,false,$7,'creating',$8,$9,$10) RETURNING {ROW}"),
+            &[&operation,&actor.tenant_id,&case_id,&session,&actor.user_id,&Some(mcp_id.clone()),&lease_id,&selected.template_id,&selected.candidate_id,&selected.release_id],
+        )
+        .await?;
+        cases::audit(
+            &*tx,
+            actor,
+            case_id,
+            "sandbox.switching",
+            json!({"operation_id":operation,"previous_operation_id":current["id"],"session_id":session,"template_id":selected.template_id}),
+        )
+        .await?;
+        tx.commit().await?;
+
+        let metadata = json!({"project":"erp-agent","erp_operation":operation,"erp_case":case_id,"erp_tenant":actor.tenant_id,"erp_user":actor.user_id,"erp_session":session,"erp_template":selected.template_id});
+        let create_request = json!({
+            "templateID":selected.template_id,
+            "timeout":900,
+            "allow_internet_access":false,
+            "metadata":metadata,
+            "network":{"allow_out":cube_allow_out()?}
+        });
+        let created = call(app, "/sandboxes", reqwest::Method::POST, Some(create_request)).await;
+        match created {
+            Ok(created) => {
+                let sandbox_id = remote_id(&created)?;
+                let remote = call(app, &format!("/sandboxes/{sandbox_id}"), reqwest::Method::GET, None).await?;
+                if !matches(&remote, &row) {
+                    return Err(Error::conflict("sandbox_scope_mismatch"));
+                }
+                row = save(db, actor, &row, json!({"sandbox_id":sandbox_id})).await?;
+            }
+            Err(error) => {
+                row = reconcile(app, db, actor, row).await?;
+                if row["sandbox_id"].is_null() {
+                    return Err(error);
+                }
+            }
+        }
+        row = reconcile(app, db, actor, row).await?;
+        if let (Some(env_vars), Some(sandbox_id)) = (env_vars.as_ref(), row["sandbox_id"].as_str()) {
+            if row["state"] != "released" && row["error_code"] != "scope_mismatch" {
+                configure_guest(app, sandbox_id, operation, env_vars).await?;
+                row = save(db, actor, &row, json!({"error_code":null})).await?;
+                row = reconcile(app, db, actor, row).await?;
+            }
+        }
+        Ok(row)
+    }
+    .await;
+    if result.is_err() {
+        cleanup_switch_target(app, db, actor, operation).await;
+    }
+    result
+}
+
+async fn cleanup_switch_target(
+    app: &App,
+    db: &mut deadpool_postgres::Object,
+    actor: &Principal,
+    operation: Uuid,
+) {
+    let row = db
+        .query_opt(
+            &format!("SELECT {ROW} FROM case_sandboxes s WHERE id=$1"),
+            &[&operation],
+        )
+        .await
+        .ok()
+        .and_then(|row| row.map(|value| value.get::<_, Value>(0)));
+    let Some(row) = row else { return };
+    if row["state"] == "released" { return; }
+    let row = save(db, actor, &row, json!({"active":false,"state":"releasing","guest_ready":false})).await.ok();
+    if let Some(row) = row { let _ = reconcile(app, db, actor, row).await; }
+}
+
+async fn promote_switch(
+    _app: &App,
+    db: &mut deadpool_postgres::Object,
+    actor: &Principal,
+    case_id: Uuid,
+    old_id: Uuid,
+    new_id: Uuid,
+) -> Result<(Value, Value)> {
+    let tx = db.transaction().await?;
+    let old: Value = object(
+        &*tx,
+        &format!("SELECT {ROW} FROM case_sandboxes s WHERE id=$1 AND tenant_id=$2 AND case_id=$3 AND active=true FOR UPDATE"),
+        &[&old_id, &actor.tenant_id, &case_id],
+    )
+    .await?;
+    let new: Value = object(
+        &*tx,
+        &format!("SELECT {ROW} FROM case_sandboxes s WHERE id=$1 AND tenant_id=$2 AND case_id=$3 AND active=false FOR UPDATE"),
+        &[&new_id, &actor.tenant_id, &case_id],
+    )
+    .await?;
+    if new["state"] != "provisioned" || new["guest_ready"] != true {
+        return Err(Error::conflict("runtime_not_ready"));
+    }
+    let busy: bool = tx
+        .query_one(
+            "SELECT EXISTS(SELECT 1 FROM agent_runs WHERE tenant_id=$1 AND case_id=$2 AND state IN ('queued','running','waiting'))",
+            &[&actor.tenant_id, &case_id],
+        )
+        .await?
+        .get(0);
+    if busy {
+        return Err(Error::conflict("agent_busy"));
+    }
+    tx.execute(
+        "UPDATE case_sandboxes SET active=false,state='releasing',guest_ready=false,error_code=NULL,checked_at=now() WHERE id=$1",
+        &[&old_id],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE case_sandboxes SET active=true WHERE id=$1",
+        &[&new_id],
+    )
+    .await?;
+    let session = old["session_id"].as_str().ok_or_else(Error::missing)?;
+    if let Some(lease) = old["session_lease_id"].as_str() {
+        agent_sessions::revoke_runtime_lease(&*tx, uuid(lease)?, session).await?;
+    } else {
+        agent_sessions::revoke_base(&*tx, session).await?;
+    }
+    cases::audit(
+        &*tx,
+        actor,
+        case_id,
+        "sandbox.switched",
+        json!({"previous_operation_id":old_id,"operation_id":new_id,"template_id":new["runtime_template_id"]}),
+    )
+    .await?;
+    tx.commit().await?;
+    let old = object(
+        &***db,
+        &format!("SELECT {ROW} FROM case_sandboxes s WHERE id=$1"),
+        &[&old_id],
+    )
+    .await?;
+    let new = object(
+        &***db,
+        &format!("SELECT {ROW} FROM case_sandboxes s WHERE id=$1"),
+        &[&new_id],
+    )
+    .await?;
+    Ok((old, new))
 }

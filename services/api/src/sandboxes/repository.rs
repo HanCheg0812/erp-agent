@@ -16,11 +16,21 @@ pub(super) async fn save(
     // provider id reserved, because Cube can assign that id to a later
     // sandbox and `sandbox_id` is globally unique in PostgreSQL.
     if next["state"] == "released" {
+        next["active"] = json!(false);
+        if let Some(sandbox_id) = next["sandbox_id"].as_str() {
+            next["last_sandbox_id"] = json!(sandbox_id);
+        }
         next["sandbox_id"] = Value::Null;
+    } else if let Some(sandbox_id) = next["sandbox_id"].as_str() {
+        next["last_sandbox_id"] = json!(sandbox_id);
     }
     let tx = db.transaction().await?;
     let id = uuid(row["id"].as_str().unwrap())?;
-    let saved=object(&*tx,&format!("UPDATE case_sandboxes s SET sandbox_id=$2,state=$3,provider_state=$4,guest_ready=$5,error_code=$6,mcp_session_id=$7,checked_at=now() WHERE id=$1 RETURNING {ROW}"),&[&id,&next["sandbox_id"].as_str(),&next["state"].as_str().unwrap(),&next["provider_state"].as_str(),&next["guest_ready"].as_bool().unwrap_or(false),&next["error_code"].as_str(),&next["mcp_session_id"].as_str()]).await?;
+    let session_lease_id = next["session_lease_id"]
+        .as_str()
+        .map(uuid)
+        .transpose()?;
+    let saved=object(&*tx,&format!("UPDATE case_sandboxes s SET sandbox_id=$2,state=$3,provider_state=$4,guest_ready=$5,error_code=$6,mcp_session_id=$7,last_sandbox_id=$8,active=$9,session_lease_id=$10,checked_at=now() WHERE id=$1 RETURNING {ROW}"),&[&id,&next["sandbox_id"].as_str(),&next["state"].as_str().unwrap(),&next["provider_state"].as_str(),&next["guest_ready"].as_bool().unwrap_or(false),&next["error_code"].as_str(),&next["mcp_session_id"].as_str(),&next["last_sandbox_id"].as_str(),&next["active"].as_bool().unwrap_or(true),&session_lease_id]).await?;
     if saved["state"] != row["state"] {
         cases::audit(
             &*tx,

@@ -121,6 +121,9 @@ async fn enqueue(
     if repository::active_run(&*tx, actor, id).await? {
         return Err(Error::conflict("agent_busy"));
     }
+    if crate::sandboxes::switch_pending(&*tx, actor.tenant_id, id).await? {
+        return Err(Error::conflict("runtime_switching"));
+    }
     let session = agent_sessions::bind(&tx, actor, id).await?;
     let mut message =
         repository::insert_message(&tx, actor, id, request, text_value, &settings).await?;

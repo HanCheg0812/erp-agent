@@ -17,7 +17,9 @@ use serde_json::{Value, json};
 use std::{collections::HashSet, io::Write, sync::Arc, time::Duration};
 use tokio::io::AsyncReadExt;
 mod actions;
+mod bash_probe;
 mod business_mcp;
+mod cube_browser;
 mod cube_quantity;
 mod recovery;
 mod resident;
@@ -41,6 +43,7 @@ pub(crate) struct Request {
     pub(crate) permission_context: Value,
     #[serde(default)]
     pub(crate) resume: bool,
+    pub(crate) model: String,
     pub(crate) effort: String,
 }
 fn message_operation() -> String {
@@ -199,6 +202,10 @@ async fn run() -> Result<()> {
         .read_to_string(&mut input)
         .await?;
     let request: Request = serde_json::from_str(&input)?;
+    ensure!(
+        model == request.model,
+        "Turn model differs from configured model"
+    );
     let timeout: u64 = std::env::var("AGENT_TURN_TIMEOUT_SECONDS")
         .unwrap_or_else(|_| "0".into())
         .parse()?;
@@ -235,6 +242,10 @@ async fn run() -> Result<()> {
         "Invalid reasoning effort"
     );
     ensure!(
+        ["deepseek-flash", "deepseek-v4-pro"].contains(&request.model.as_str()),
+        "Invalid model"
+    );
+    ensure!(
         request.memories.len() <= 50
             && request.memories.iter().all(|m| m["text"]
                 .as_str()
@@ -263,6 +274,13 @@ async fn run() -> Result<()> {
         .register(
             "cube_quantity_summary".into(),
             Arc::new(cube_quantity::CubeQuantitySummary),
+        )
+        .await;
+    available.insert("cube_browser_browse".into());
+    registry
+        .register(
+            "cube_browser_browse".into(),
+            Arc::new(cube_browser::CubeBrowserBrowse),
         )
         .await;
     for (name, tool) in business_mcp::connect().await? {

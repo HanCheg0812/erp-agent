@@ -7,4 +7,4 @@ mod storage;
 
 pub use handlers::{claim_route, create, document_get, document_put, load, save};
 pub(crate) use leases::authorize;
-pub(crate) use registration::{bind, claim};
+pub(crate) use registration::{bind, claim, claim_runtime, revoke_base, revoke_runtime_lease};

@@ -1,0 +1,10 @@
+[Unit]
+Description=Forge ERP Agent health snapshot
+After=erp-agent-api.service erp-agent-alert-sink.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/erp-agent
+Environment=MONITORING_WORKER_COUNT=8
+ExecStart=%h/.local/bin/node %h/erp-agent/scripts/monitoring-health.mjs
+UMask=0027

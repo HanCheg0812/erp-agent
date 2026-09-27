@@ -15,6 +15,7 @@
     "embedding:up:gpu": "docker compose --env-file .env -f infra/compose.yaml -f infra/compose.tei-gpu.yaml --profile embedding up -d tei",
     "embedding:down": "docker compose --env-file .env -f infra/compose.yaml --profile embedding stop tei",
     "storage:init": "cargo run --locked --manifest-path services/api/Cargo.toml -- storage-init",
+    "monitoring:configure": "node scripts/setup-monitoring.mjs",
     "dev:api": "cargo run --locked --manifest-path services/api/Cargo.toml",
     "dev:worker": "cargo run --locked --manifest-path services/api/Cargo.toml -- worker",
     "dev:workers": "node scripts/start-dev-workers.mjs",
