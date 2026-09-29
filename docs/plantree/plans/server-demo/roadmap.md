@@ -2,6 +2,8 @@
 
 当前阶段：业务 Web/API、PostgreSQL、Cube 生命周期及 JCode/DeepSeek Responses 完成本地联调；当前主机的 API、worker、Cube 探针和 Prometheus/Alertmanager/Grafana 已完成 loopback-only 持久部署，证据见[监控部署记录](monitoring-deployment.md)。ERP MCP 已注册两个只读工具并通过真实 ERPNext 列表/明细读取；工具级 EBAC、ERP 连接、平台用户绑定、本地绑定用户凭据 provider、Agent 友好错误契约和真实双用户权限交集已接入，下一阶段按[ERP MCP 下一阶段设计](erp-mcp-next-phase.md)推进正式凭据生命周期、只读生产化、业务推演和受控写入。OpenViking MCP 工具已注册，服务/Embedding 仍未配置。
 
+2026-09-29 最新：Web 直接渲染真实会话 SSE 增量，正文与 reasoning 的新词使用 650ms 透明度淡入，不做本地打字播放。新回合先在画布顶部附近增长，内容填满后用合并的 `requestAnimationFrame` 直接跟随底部；用户上滑后保持阅读位置。固定事件重放和真实 Cube/JCode/DeepSeek 浏览器回合均通过，详见 [实现记录](implementation-status.md)。[前端性能审计](frontend-performance-audit.md)已量化长单段与历史消息累积的退化，尚未实施优化。后续仍需把 JCode 原始 reasoning 与 summary 事件拆成显式类型，并完成长期混合负载和主观流畅度验收。
+
 ## Done
 
 - Cube 基础模板并发探针：现有轻量模板在单健康节点完成 1/2/4/8 路各三轮创建、健康检查及释放；45 个实例全部成功且清理归零。仅为生命周期小规模验证，不代表 JCode 业务容量；详见[测量记录](cube-concurrency.md)。

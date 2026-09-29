@@ -14,6 +14,8 @@ Cube 官方控制台的本地入口、服务托管和监控验证状态见 [Web 
 
 Web Agent Chat 与灰白视觉的实现、验证及边界见 [Web 会话记录](web-ui.md)。
 
+当前 Web 的 DOM 变化、长回复与历史消息性能测量见 [前端性能审计](frontend-performance-audit.md)。
+
 2026-09-22：[Web/API 与 Cube 生命周期联调](web-api-integration.md)通过真实浏览器、PostgreSQL 和进程重启检查；[Mindloop 清理](mindloop-cleanup.md)完成并保留 Cube。
 
 随后按用户提供的专用模型配置完成 [DeepSeek Responses 与 JCode 联调](deepseek-integration.md)，包含真实工具循环、todo、重启恢复、可展开思考过程和正文打字效果。

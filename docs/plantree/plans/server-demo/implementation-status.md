@@ -1,5 +1,7 @@
 # Implementation Status
 
+2026-09-29 Web 前端性能审计：完整页面、合成 SSE 与 Chrome/Playwright 的 DOM/组件/帧测量见 [前端性能审计](frontend-performance-audit.md)。普通流式输出未重建旧消息或思考正文；4x CPU 下 200 条历史与 20,000 字单段存在明显长帧，且草稿输入会使整个侧栏行重渲染。本轮未修改产品代码，未做真实设备或模型性能验收。
+
 2026-09-27 当前 Cube 主机部署与长期监控：`erp-agent-api.service`、8 个 `erp-agent-worker@.service`、30 秒健康快照 timer 和本地告警 sink 已切换为持久用户级 systemd 服务，`loginctl Linger=yes`。Prometheus 2.54.1、Alertmanager 0.27.0、Blackbox/Node/PostgreSQL exporters 和 Grafana 11.2.0 通过 Compose 启动，全部端点 loopback-only；Prometheus 11/11 targets 为 `up`（含 Cubelet 原生 `/v1/metrics/resource`），14 条规则通过 `promtool`，Alertmanager synthetic canary 按 30 秒聚合延迟写入脱敏 JSONL，API 重启后 ready、metrics 和 8 个 worker 均恢复。完整证据、端点和限制见[监控部署记录](monitoring-deployment.md)。这证明当前 Cube 主机持久运行和告警投递，不代表公网生产、高可用、远端通知、备份恢复、guest 工作负载指标或长期业务负载验收。
 
 2026-09-26 Cube/Forge 模板切换接线：新增 `POST /v1/cases/{case_id}/sandbox/switch`，由 Cube 继续负责模板与 Sandbox 生命周期，Forge 负责已采纳模板校验、同一 PostgreSQL 会话的第二运行租约、resident Bridge/JCode 配置、原子提升和旧实例释放。切换期间消息入队与 Worker provisioning 会拒绝；替换失败会清理非活动实例并保留旧活动实例。PostgreSQL 新增 `agent_session_runtime_leases`，`case_sandboxes` 增加 `active/session_lease_id`，并保留旧绑定的模板、实例和审计记录。系统 fixture 已通过成功切换、会话保持、旧租约撤销、切换后消息和失败回滚；这不是 Cube 原地换模板，也不是生产部署验收。详情见[模板接入计划](runtime-management.md#2026-09-26-forge-aware-template-switch)。
