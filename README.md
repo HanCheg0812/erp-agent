@@ -1,10 +1,94 @@
 # ERP Agent
 
-面向民品生产运营的服务器端智能体 Demo：客户需求变更 → 影响分析 → 人工确认 → ERP 执行跟踪。
+<div align="center">
 
-当前状态：灰白 Chat Web 已通过 Rust 业务 API 接入 JCode Rust Loop 和 DeepSeek 原生 Responses API。个人邮箱注册/登录、用户隔离、RustFS 私有原件、真实案件读取、todo、连续对话、Skill 发现/加载、PostgreSQL 恢复和真实上下文压缩已验证。聊天附件可随消息持久绑定；PNG/JPEG/WebP 可经 RustFS 和 JCode 交给 DeepSeek Flash，即时图片问答已通过[真实合成图探针](docs/plantree/plans/server-demo/chat-attachment-agent-design.md)。PDF、DOCX、XLSX、MD、TXT 现有 Rust 即时读取路径和受限 `attachment_read` 续读工具，解析器与授权链路通过本地测试，尚未完成真实模型对每种格式的逐一验收。ERP/OpenViking 两个 Rust MCP 服务及四个工具已注册，真实 ERPNext 列表/明细读取通过；TEI 本地 Docker 配置已添加但尚未完成镜像/模型下载与推理验收，OpenViking 服务、持久索引和 RAG 仍未完成。模型/思考程度、输入框自增高、真实停止和三种操作授权已实现；当前回合的授权上下文会注入 JCode，并由 `case_read` 返回，业务审批单独要求人工 approver。默认回合总时限已关闭，流式中断和恢复修复见[验证记录](docs/plantree/plans/server-demo/stream-recovery-fix.md)。本地 Cube v0.7.2 常驻 Harness 已完成合成案件首轮、续轮、API/Worker 重启后续轮、同实例三次暂停恢复、销毁重建续轮和 50 用户并发探针；宿主机路径保留用于对照，同口径延迟归因、长期混合负载和完整业务验收仍待验证，见[Cube 运行时记录](docs/plantree/plans/server-demo/cube-resident-runtime.md)。
+### From changing requirements to decisions teams can trust.
 
-## 已确定方向
+**让制造变更有据可查，让每一步业务决策都由人把关。**
+
+把客户变更、订单资料和生产上下文放进同一个案件工作区。AI 帮团队梳理证据、分析影响并准备方案；业务人员审核后，再决定下一步。
+
+<p>
+  <img src="docs/screenshots/final-desktop-chat.png" alt="ERP Agent 制造变更案件与人工审核界面" width="100%" />
+</p>
+
+<sub>产品界面示意 · 合成制造案例数据</sub>
+
+<br><br>
+
+[产品流程](#从变更到决策) · [核心能力](#为真实业务边界而设计) · [系统架构](#系统架构) · [本地运行](#本地运行) · [项目文档](#项目文档)
+
+</div>
+
+---
+
+## 从变更到决策
+
+一张订单变更单，往往牵动交期、数量、物料和现场安排。ERP Agent 将这些线索放回同一个业务上下文：团队可以查看案件资料，让 Agent 对照 ERP 与受限知识来源整理影响，再把建议变成可审阅的方案。
+
+```text
+客户变更  →  资料与订单  →  影响分析  →  人工审核  →  后续执行跟踪
+```
+
+### 让每个建议都能回到依据
+
+案件、附件、ERP 记录和分析过程围绕同一工作区组织。Agent 可以持续追问和补充分析，团队也能回看提案版本及其证据，不必把重要判断留在一次性的聊天里。
+
+### 把决定权留在业务流程中
+
+Agent 负责整理与建议，审批由人完成。后端负责权限、版本和业务状态检查；分析清单不是业务完成凭证，批准提案也不会绕过控制直接改写 ERP。
+
+## 为真实业务边界而设计
+
+- **案件化协作：** 对话、资料、建议和审核围绕具体业务案件持续保存。
+- **有界的 Agent：** 通过受控工具读取案件和 ERP 信息，不向业务模型开放通用 Bash 或任意文件编辑。
+- **可追溯的审核：** 提案保留版本与证据入口，审批绑定明确的方案内容。
+- **独立的业务控制：** 身份、授权、幂等和 ERP 状态复核由后端执行。
+
+## 项目进展
+
+当前是持续开发中的 Demo。案件工作区、对话恢复、图片问答、ERPNext 只读接入和 Cube 运行时探针已有本地验证；生产部署、完整业务验收、文档持久解析、知识检索和 ERP 受控写入仍在建设或待验收。
+
+<details>
+<summary>查看各模块的验证范围</summary>
+
+| 领域 | 已验证 | 仍在建设或待验收 |
+| --- | --- | --- |
+| 案件工作区 | 邮箱注册登录、个人数据隔离、会话保存、PostgreSQL 重启恢复 | 生产部署与正式账户管理 |
+| Agent 对话 | JCode Rust Loop、DeepSeek Responses、连续工具调用、上下文压缩与恢复 | 长时间混合负载与完整业务验收 |
+| 文件资料 | RustFS 私有原件、图片问答；多种文档的受限读取路径通过本地测试 | 各文档格式的真实模型验收、MinerU 持久解析 |
+| ERP 与知识 | ERPNext 真实列表/明细只读、MCP 工具和权限链路 | 审批后的受控写入、OpenViking 索引与 RAG |
+| 运行环境 | Cube 常驻 Harness 的恢复及并发探针 | 长期性能测量、生产级部署与故障演练 |
+
+详见[当前实施状态](docs/plantree/plans/server-demo/implementation-status.md)和[项目路线图](docs/plantree/plans/server-demo/roadmap.md)。
+
+</details>
+
+## 系统架构
+
+<p align="center">
+  <img src="docs/architecture/cube-jcode-server-architecture.png" alt="ERP Agent 服务端架构图" width="100%" />
+</p>
+
+<p align="center"><sub>沙箱内 JCode 运行方式的候选架构；部署位置仍以实测和架构记录为准。</sub></p>
+
+## 技术栈
+
+- **Web：** React、TypeScript
+- **业务 API 与运行桥：** Rust、Axum、JCode
+- **持久化与文件：** PostgreSQL、RustFS
+- **演示 ERP：** ERPNext，通过受控 MCP 工具访问
+- **沙箱：** CubeSandbox
+- **规划中的知识链路：** OpenViking、MinerU
+
+## 安全与业务边界
+
+- 身份、授权、审批、幂等、ERP 状态检查和版本校验由后端负责。
+- Agent 仅获得案件范围内的工具；通用 Bash 和任意文件编辑不向业务模型开放。
+- ERP 读写需要区分授权与审批；当前演示已验证只读链路，ERP 写入尚未启用。
+- 运行凭据和客户资料不应提交到仓库；本地密钥放在被忽略的运行配置中。
+
+## 设计原则
 
 - 自建 Web，采用 JCode 的 Rust Harness / Loop。
 - CubeSandbox 纳入首版；优先验证沙箱内常驻 JCode/Bridge，同时对照外部 Harness，最终位置待实测。
@@ -16,15 +100,14 @@
 - 审批、业务状态、幂等、权限与版本检查由沙箱外的后台执行。
 - 高性能以整条链路的延迟、吞吐、资源和正确性实测为依据。
 
-## 从这里继续
+## 项目文档
 
-1. 阅读 [AGENTS.md](AGENTS.md)。
-2. 阅读 [计划入口](docs/plantree/README.md) 和 [首个 Demo 路线图](docs/plantree/plans/server-demo/roadmap.md)。
-3. 查看 [两种 Cube 部署方式的调研](docs/architecture/cube-runtime-placement.md)、[完整架构](docs/architecture/erp-agent-demo-architecture.md) 和 [业务 Prompt 草案](prompts/erp-agent-system-prompt.md)。
-
-下图为沙箱内方案，属于候选部署设计，不代表已部署。
-
-![服务器架构](docs/architecture/cube-jcode-server-architecture.png)
+- [架构说明](docs/architecture/erp-agent-demo-architecture.md)
+- [项目计划与验证依据](docs/plantree/README.md)
+- [当前实施状态](docs/plantree/plans/server-demo/implementation-status.md)
+- [首个 Demo 路线图](docs/plantree/plans/server-demo/roadmap.md)
+- [Cube 运行时部署方式调研](docs/architecture/cube-runtime-placement.md)
+- [业务 Agent Prompt 草案](prompts/erp-agent-system-prompt.md)
 
 ## 目录
 
@@ -74,7 +157,7 @@ API 默认 `http://127.0.0.1:3100`；`/health` 检查进程，`/ready` 检查数
 
 本地 PostgreSQL 默认允许 200 个连接，可用 `POSTGRES_MAX_CONNECTIONS` 调整。API 和每个 worker 各有独立连接池；独立 worker 的默认池上限为 12，API 为 16，可用 `DATABASE_POOL_MAX_SIZE` 按进程覆盖，且池上限必须大于该进程的并发槽位。活跃 Agent 回合会持有案件锁连接；Cube guest 通过受限 HTTP 调用 Rust API，由 API 使用数据库池，guest 本身不直接连接 PostgreSQL；通知监听使用独立连接。[真实 50 用户探针](docs/plantree/plans/server-demo/agent-runtime-concurrency.md)在旧的 100 连接上限遇到连接耗尽，调整后才达到 50 路并发。连接数、内存和模型限流必须与槽位一起评估。
 
-文档 RAG 的 embedding 推理服务由本机 Docker Compose 单独运行，模型缓存持久保留，HTTP 仅绑定 `127.0.0.1:8080`。先执行 `npm run dev:init` 补齐非敏感配置，再用 `npm run embedding:up` 启动 CPU 版 TEI；装好 NVIDIA Container Toolkit 后可改用 `npm run embedding:up:gpu`。模型就绪后，在 `embedding_models` 登记 BGE-M3 并运行 `npm run dev:embedding-worker`，具体命令见 [ingestion-worker 说明](services/ingestion-worker/README.md)。目前解析产物尚未接入文档队列，启动服务不等于 RAG 已可用。
+文档 RAG 的 embedding 推理服务使用本机 Docker Compose，模型缓存持久保留，HTTP 仅绑定 `127.0.0.1:8080`。先执行 `npm run dev:init` 补齐非敏感配置，`npm run embedding:pull` 仅拉取 TEI 镜像；`npm run embedding:up` 会启动 CPU 版并在首次运行时下载模型，目前按用户要求保持停止。装好 NVIDIA Container Toolkit 后可用 `npm run embedding:up:gpu`。模型就绪后，在 `embedding_models` 登记 BGE-M3 并运行 `npm run dev:embedding-worker`，具体命令见 [ingestion-worker 说明](services/ingestion-worker/README.md)。目前解析产物尚未接入文档队列，启动服务不等于 RAG 已可用。
 
 `npm run check` 执行 Web 类型检查、Rust 构建、真实 PostgreSQL 集成测试和 Web 构建。测试创建并删除随机名称的独立数据库，连接用户需要 CREATEDB 权限；不会清空业务库。`npm run db:down` 停止本项目数据库并保留卷。
 
